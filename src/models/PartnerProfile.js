@@ -39,6 +39,10 @@ const PartnerProfileSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      understandOperationalControl: {
+        type: Boolean,
+        default: false,
+      },
     },
     status: {
       type: String,

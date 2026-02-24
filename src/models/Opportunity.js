@@ -16,6 +16,7 @@ const OpportunitySchema = new mongoose.Schema(
       type: String,
       required: [true, 'Description is required'],
       trim: true,
+      maxlength: [500, 'Description cannot exceed 500 characters'],
     },
     location: {
       type: String,
@@ -23,6 +24,10 @@ const OpportunitySchema = new mongoose.Schema(
     },
     date: {
       type: Date,
+    },
+    time: {
+      type: String, // e.g. "10:00 AM"
+      trim: true,
     },
     category: {
       type: String,
@@ -34,10 +39,19 @@ const OpportunitySchema = new mongoose.Schema(
       min: [1, 'At least 1 volunteer required'],
       default: 1,
     },
+    flyerUrl: {
+      type: String,
+      trim: true,
+    },
+    type: {
+      type: String,
+      enum: ['event', 'opportunity'],
+      default: 'opportunity',
+    },
     status: {
       type: String,
-      enum: ['active', 'completed', 'cancelled'],
-      default: 'active',
+      enum: ['pending', 'active', 'completed', 'cancelled', 'rejected'],
+      default: 'pending',
     },
     // Tracks volunteers who have claimed a spot
     attendees: [

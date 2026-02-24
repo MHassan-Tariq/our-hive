@@ -1,5 +1,6 @@
 const VolunteerProfile = require('../models/VolunteerProfile');
 const Opportunity = require('../models/Opportunity');
+const ActivityLog = require('../models/ActivityLog');
 
 /**
  * @desc    Save / update a volunteer's profile
@@ -122,6 +123,15 @@ const joinOpportunity = async (req, res) => {
       { $addToSet: { joinedOpportunities: opportunity._id } },
       { upsert: true, new: true }
     );
+
+    // Activity Log for Partner
+    await ActivityLog.create({
+      userId: opportunity.partnerId,
+      type: 'New Volunteer Interest',
+      content: `A community member signed up for "${opportunity.title}".`,
+      relatedId: opportunity._id,
+      relatedModel: 'Opportunity',
+    });
 
     res.status(200).json({
       success: true,

@@ -4,6 +4,10 @@ const { protect, authorize } = require('../middleware/auth');
 const {
   submitProfile,
   getMyProfile,
+  getDashboardData,
+  createOpportunity,
+  updateOpportunity,
+  getMyOpportunities,
 } = require('../controllers/partnerController');
 
 // All partner profile routes require auth + partner role
@@ -14,7 +18,7 @@ router.use(authorize('partner'));
  * @swagger
  * /api/partners/profile:
  *   post:
- *     summary: Submit or update partner onboarding profile
+ *     summary: Submit or update partner organization profile
  *     description: >
  *       A partner submits their organization details and agreement confirmations.
  *       This endpoint uses **upsert** logic — re-submitting will update the existing profile.
@@ -57,6 +61,9 @@ router.use(authorize('partner'));
  *                   agreedToTerms:
  *                     type: boolean
  *                     example: true
+ *                   understandOperationalControl:
+ *                     type: boolean
+ *                     example: true
  *     responses:
  *       200:
  *         description: Profile submitted successfully. Awaiting admin review.
@@ -66,22 +73,6 @@ router.use(authorize('partner'));
  *               $ref: '#/components/schemas/PartnerProfileResponse'
  *       400:
  *         description: Validation error (e.g., missing orgName).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       401:
- *         description: Unauthorized — no or invalid token.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden — user is not a partner.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/profile', submitProfile);
 
@@ -90,36 +81,79 @@ router.post('/profile', submitProfile);
  * /api/partners/my-profile:
  *   get:
  *     summary: Get logged-in partner's own profile
- *     description: Returns the partner's organization data including current approval status.
  *     tags: [Partners]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Partner profile retrieved successfully.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/PartnerProfileResponse'
- *       401:
- *         description: Unauthorized — no or invalid token.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden — user is not a partner.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       404:
- *         description: No profile found. Partner has not submitted onboarding yet.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/my-profile', getMyProfile);
+
+/**
+ * @swagger
+ * /api/partners/dashboard:
+ *   get:
+ *     summary: Get partner dashboard overview
+ *     tags: [Partners]
+ */
+router.get('/dashboard', getDashboardData);
+
+/**
+ * @swagger
+ * /api/opportunities:
+ *   post:
+ *     summary: Create a new volunteer opportunity or event (Partner only)
+ *     tags: [Partners, Opportunities]
+ */
+router.post('/opportunities', createOpportunity);
+
+/**
+ * @swagger
+ * /api/opportunities/partner:
+ *   get:
+ *     summary: Get all opportunities created by the logged-in partner
+ *     description: Retrieve list of events and volunteer opportunities. Supports optional search and status filtering.
+ *     tags: [Partners, Opportunities]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, active, rejected, completed, cancelled]
+ *         description: Filter by status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search within title or description
+ *     responses:
+ *       200:
+ *         description: List of opportunities retrieved.
+ */
+router.get('/opportunities/partner', getMyOpportunities);
+
+/**
+ * @swagger
+ * /api/opportunities/{id}:
+ *   patch:
+ *     summary: Update an existing opportunity (Partner only)
+ *     description: Allows partners to edit their submissions. Status will revert to 'pending' after edit.
+ *     tags: [Partners, Opportunities]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Opportunity'
+ *     responses:
+ *       200:
+ *         description: Opportunity updated successfully.
+ */
+router.patch('/opportunities/:id', updateOpportunity);
 
 module.exports = router;

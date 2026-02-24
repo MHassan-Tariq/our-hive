@@ -2,6 +2,8 @@ const User = require('../models/User');
 const PartnerProfile = require('../models/PartnerProfile');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const Sponsor = require('../models/Sponsor');
+const ActivityLog = require('../models/ActivityLog');
+const Opportunity = require('../models/Opportunity');
 
 const ROLES = [
   'visitor',
@@ -110,10 +112,72 @@ const updatePartnerStatus = async (req, res) => {
       isApproved: status === 'approved',
     });
 
+    // Activity Log
+    if (status === 'approved') {
+      await ActivityLog.create({
+        userId: profile.userId,
+        type: 'Submission Approved',
+        content: `Your organization "${profile.orgName}" has been approved. You can now list events on the Hive calendar.`,
+        relatedId: profile._id,
+        relatedModel: 'PartnerProfile',
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: `Partner status updated to '${status}'.`,
       data: profile,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * @desc    Update an opportunity/event approval status
+ * @route   PATCH /api/admin/opportunities/:id/status
+ * @access  Private (Admin only)
+ */
+const updateOpportunityStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!['active', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be either 'active' or 'rejected'",
+      });
+    }
+
+    const opportunity = await Opportunity.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true }
+    );
+
+    if (!opportunity) {
+      return res.status(404).json({
+        success: false,
+        message: 'Opportunity not found',
+      });
+    }
+
+    // Activity Log
+    await ActivityLog.create({
+      userId: opportunity.partnerId,
+      type: status === 'active' ? 'Submission Approved' : 'Profile Updated',
+      content: status === 'active' 
+        ? `Your event "${opportunity.title}" has been approved.` 
+        : `Your event "${opportunity.title}" was rejected.`,
+      relatedId: opportunity._id,
+      relatedModel: 'Opportunity',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Opportunity status updated to '${status}'.`,
+      data: opportunity,
     });
   } catch (err) {
     console.error(err);
@@ -243,4 +307,12 @@ const getParticipantSummary = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, getDashboard, updatePartnerStatus, addVolunteerHours, getFinances, getParticipantSummary };
+module.exports = { 
+  getAllUsers, 
+  getDashboard, 
+  updatePartnerStatus, 
+  updateOpportunityStatus,
+  addVolunteerHours, 
+  getFinances, 
+  getParticipantSummary 
+};

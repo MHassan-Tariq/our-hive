@@ -11,6 +11,7 @@ router.use(authorize('participant'));
  * /api/participant/profile:
  *   post:
  *     summary: Save or update participant profile
+ *     description: Saves participant interests and residence area.
  *     tags: [Participants]
  *     security:
  *       - bearerAuth: []
@@ -31,7 +32,7 @@ router.use(authorize('participant'));
  *                 example: "Clifton, Karachi"
  *     responses:
  *       200:
- *         description: Profile saved successfully
+ *         description: Profile saved successfully.
  */
 router.post('/profile', saveProfile);
 
@@ -40,12 +41,25 @@ router.post('/profile', saveProfile);
  * /api/participant/my-feed:
  *   get:
  *     summary: Get personalized feed of opportunities and donations
+ *     description: Returns a curated list of active opportunities and available donations matching the participant's interests or area.
  *     tags: [Participants]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: List of matching services
+ *         description: Personalized feed retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: 'boolean' }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     oneOf:
+ *                       - $ref: '#/components/schemas/Opportunity'
+ *                       - $ref: '#/components/schemas/InKindDonation'
  */
 router.get('/my-feed', getMyFeed);
 
@@ -54,6 +68,7 @@ router.get('/my-feed', getMyFeed);
  * /api/participant/request-service/{id}:
  *   post:
  *     summary: Request a service/item and generate a digital voucher
+ *     description: Generates a secure QR-ready voucher for the participant to claim an item or service.
  *     tags: [Participants]
  *     security:
  *       - bearerAuth: []
@@ -63,9 +78,10 @@ router.get('/my-feed', getMyFeed);
  *         required: true
  *         schema:
  *           type: string
+ *         description: Service or Donation ID
  *     responses:
  *       201:
- *         description: Voucher generated
+ *         description: Voucher generated successfully.
  */
 router.post('/request-service/:id', requestService);
 

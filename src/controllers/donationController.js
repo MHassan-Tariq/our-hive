@@ -7,7 +7,7 @@ const InKindDonation = require('../models/InKindDonation');
  */
 const offerItem = async (req, res) => {
   try {
-    const { itemCategory, description, itemPhotoUrl, pickupAddress } = req.body;
+    const { itemCategory, description, itemPhotoUrl, pickupAddress, quantity } = req.body;
 
     const donation = await InKindDonation.create({
       donorId: req.user._id,
@@ -15,6 +15,7 @@ const offerItem = async (req, res) => {
       description,
       itemPhotoUrl,
       pickupAddress,
+      quantity,
     });
 
     res.status(201).json({
@@ -58,15 +59,12 @@ const getMyDonations = async (req, res) => {
  * @desc    Get all available pickup items (status = 'offered')
  * @route   GET /api/donations/available-pickups
  * @access  Private (volunteer)
- * NOTE: pickupAddress is included — frontend should only surface it after claim.
  */
 const getAvailablePickups = async (req, res) => {
   try {
-    // Return all offered items but OMIT the full pickupAddress
-    // so volunteers only see address detail after they claim
     const donations = await InKindDonation.find({ status: 'offered' })
       .populate('donorId', 'name')
-      .select('-pickupAddress') // hide address until volunteer claims item
+      .select('-pickupAddress')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -103,12 +101,10 @@ const claimDonation = async (req, res) => {
       });
     }
 
-    // Assign volunteer and transition status
     donation.status = 'claimed';
     donation.assignedVolunteerId = req.user._id;
     await donation.save();
 
-    // Return the full record including pickupAddress — now that they've claimed it
     const populated = await InKindDonation.findById(donation._id)
       .populate('donorId', 'name email')
       .populate('assignedVolunteerId', 'name email');
@@ -124,4 +120,53 @@ const claimDonation = async (req, res) => {
   }
 };
 
-module.exports = { offerItem, getMyDonations, getAvailablePickups, claimDonation };
+/**
+ * @desc    Get donations assigned to the logged-in partner (recipient)
+ * @route   GET /api/donations/assigned
+ * @access  Private (partner)
+ */
+const getAssignedDonations = async (req, res) => {
+  try {
+    const partnerId = req.user._id;
+    const { status, search } = req.query;
+    let query = { recipientId: partnerId };
+
+    if (status) {
+      // Mapping UI tabs to model status
+      if (status === 'pending') query.status = 'claimed';
+      else if (status === 'in-transit') query.status = 'in-transit';
+      else if (status === 'delivered') query.status = 'delivered';
+      else query.status = status;
+    }
+
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { itemCategory: { $regex: search, $options: 'i' } },
+        { quantity: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const donations = await InKindDonation.find(query)
+      .populate('donorId', 'name')
+      .populate('assignedVolunteerId', 'name phone')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: donations.length,
+      data: donations,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+module.exports = {
+  offerItem,
+  getMyDonations,
+  getAvailablePickups,
+  claimDonation,
+  getAssignedDonations,
+};

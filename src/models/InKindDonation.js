@@ -9,12 +9,16 @@ const InKindDonationSchema = new mongoose.Schema(
     },
     itemCategory: {
       type: String,
-      enum: ['Food', 'Clothing', 'Furniture', 'Electronics', 'Other'],
       required: [true, 'Item category is required'],
+      enum: ['Food', 'Clothing', 'Furniture', 'Electronics', 'Other'],
     },
     description: {
       type: String,
       required: [true, 'Description is required'],
+      trim: true,
+    },
+    quantity: {
+      type: String, // e.g. "12 Crates", "40 Liters"
       trim: true,
     },
     itemPhotoUrl: {
@@ -28,14 +32,24 @@ const InKindDonationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['offered', 'claimed', 'picked-up', 'delivered'],
+      enum: ['offered', 'claimed', 'in-transit', 'picked-up', 'delivered'],
       default: 'offered',
     },
-    // null until a volunteer claims it
     assignedVolunteerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,
+    },
+    recipientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    pickupDate: {
+      type: Date,
+    },
+    deliveredDate: {
+      type: Date,
     },
   },
   {
