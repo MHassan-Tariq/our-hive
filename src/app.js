@@ -56,7 +56,7 @@ app.use('/api/user', userRoutes);
 
 // ─── Root Health Check ────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  const protocol = req.protocol;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.get('host');
   const fullUrl = `${protocol}://${host}`;
   
