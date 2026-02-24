@@ -1,14 +1,3 @@
-{
-  "name": "our-hive",
-  "version": "1.0.0",
-  "description": "Our Hive community platform backend API",
-  "main": "src/server.js",
-  "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "build": "echo \"Build skipped: no transpilation required for this Express project.\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
