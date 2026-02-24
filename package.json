@@ -1,3 +1,14 @@
+{
+  "name": "our-hive",
+  "version": "1.0.0",
+  "description": "Our Hive community platform backend API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build": "mkdir -p public && echo 'Our Hive API' > public/index.html",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
