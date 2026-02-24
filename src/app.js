@@ -27,11 +27,16 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, {
     customSiteTitle: 'Our Hive API Docs',
+    customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js'
+    ],
     swaggerOptions: {
-      persistAuthorization: true, // Keeps Bearer token after page refresh
-      docExpansion: 'list',       // Start with endpoints collapsed for readability
-      filter: true,               // Enable search filter bar
-      tryItOutEnabled: true,      // Enable "Try it out" by default
+      persistAuthorization: true,
+      docExpansion: 'list',
+      filter: true,
+      tryItOutEnabled: true,
     },
     customCss: `
       .swagger-ui .topbar { background-color: #1a1a2e; }

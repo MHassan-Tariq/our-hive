@@ -14,7 +14,11 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3001',
+        url: 'https://our-hive.vercel.app',
+        description: 'Production Server (Vercel)',
+      },
+      {
+        url: 'http://localhost:5000',
         description: 'Local Development Server',
       },
     ],
