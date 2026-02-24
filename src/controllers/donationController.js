@@ -132,7 +132,6 @@ const getAssignedDonations = async (req, res) => {
     let query = { recipientId: partnerId };
 
     if (status) {
-      // Mapping UI tabs to model status
       if (status === 'pending') query.status = 'claimed';
       else if (status === 'in-transit') query.status = 'in-transit';
       else if (status === 'delivered') query.status = 'delivered';
@@ -143,7 +142,6 @@ const getAssignedDonations = async (req, res) => {
       query.$or = [
         { description: { $regex: search, $options: 'i' } },
         { itemCategory: { $regex: search, $options: 'i' } },
-        { quantity: { $regex: search, $options: 'i' } },
       ];
     }
 

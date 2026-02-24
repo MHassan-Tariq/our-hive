@@ -46,7 +46,7 @@ router.use(authorize('partner'));
  *                 example: 123 Main St, Karachi, Pakistan
  *               website:
  *                 type: string
- *                 example: https://acme.org
+ *                 example: 'https://acme.org'
  *               intendedRoles:
  *                 type: array
  *                 items:
