@@ -27,6 +27,7 @@ const SponsorSchema = new mongoose.Schema(
     organizationName: {
       type: String,
       trim: true,
+      maxlength: [100, 'Organization name cannot be more than 100 characters'],
     },
     totalContributed: {
       type: Number,
@@ -39,6 +40,19 @@ const SponsorSchema = new mongoose.Schema(
       default: 'Supporter',
     },
     isAnonymous: {
+      type: Boolean,
+      default: false,
+    },
+    logoUrl: {
+      type: String,
+      trim: true,
+    },
+    subscriptionInterval: {
+      type: String,
+      enum: ['once', 'monthly'],
+      default: 'once',
+    },
+    isMonthlySupporter: {
       type: Boolean,
       default: false,
     },

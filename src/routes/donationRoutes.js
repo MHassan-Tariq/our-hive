@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const upload = require('../middleware/uploadMiddleware');
 const {
   offerItem,
   getMyDonations,
   getAvailablePickups,
   claimDonation,
   getAssignedDonations,
+  getDonorDashboard,
+  updateDonorProfile,
+  updateDonation,
 } = require('../controllers/donationController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -13,12 +17,104 @@ router.use(protect);
 
 /**
  * @swagger
+ * /api/donations/dashboard:
+ *   get:
+ *     summary: Get donor dashboard overview (hybrid impact)
+ *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard data retrieved.
+ */
+router.get('/dashboard', authorize('donor'), getDonorDashboard);
+
+/**
+ * @swagger
+ * /api/donations/profile:
+ *   patch:
+ *     summary: Update donor profile settings (e.g. monthly goal)
+ *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               monthlyGoal: { type: number, example: 85 }
+ *     responses:
+ *       200:
+ *         description: Profile updated.
+ */
+router.patch('/profile', authorize('donor'), updateDonorProfile);
+
+/**
+ * @swagger
  * /api/donations:
  *   post:
  *     summary: Offer a new in-kind donation (Donor only)
  *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - itemName
+ *               - itemCategory
+ *               - description
+ *             properties:
+ *               itemName: { type: string, example: "10 Cases of Water" }
+ *               itemCategory: { type: string, enum: [Food, Clothing, Furniture, Electronics, Other] }
+ *               description: { type: string }
+ *               quantity: { type: string }
+ *               estimatedValue: { type: string, example: "$50" }
+ *               deliveryMethod: { type: string, enum: [pickup, drop-off], example: "pickup" }
+ *               additionalNotes: { type: string, example: "Gate code 1234" }
+ *               petInfo:
+ *                 type: string
+ *                 description: JSON string of pet info object {hasCat, hasDog}.
+ *               itemPhoto: { type: string, format: binary }
+ *               pickupAddress:
+ *                 type: string
+ *                 description: JSON string of address object {street, city, zip}.
  */
-router.post('/', authorize('donor'), offerItem);
+router.post('/', authorize('donor'), upload.single('itemPhoto'), offerItem);
+
+/**
+ * @swagger
+ * /api/donations/{id}:
+ *   patch:
+ *     summary: Update a pending in-kind donation offering (Donor only)
+ *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               itemName: { type: string }
+ *               itemCategory: { type: string }
+ *               description: { type: string }
+ *               quantity: { type: string }
+ *               itemPhoto: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: Donation updated.
+ */
+router.patch('/:id', authorize('donor'), upload.single('itemPhoto'), updateDonation);
 
 /**
  * @swagger
@@ -26,6 +122,26 @@ router.post('/', authorize('donor'), offerItem);
  *   get:
  *     summary: Get items I have offered
  *     tags: [Donations]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by itemName or refId.
+ *     responses:
+ *       200:
+ *         description: List of my donations.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 count: { type: integer }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/InKindDonation'
  */
 router.get('/my', authorize('donor'), getMyDonations);
 

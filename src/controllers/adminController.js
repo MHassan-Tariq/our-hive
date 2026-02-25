@@ -4,6 +4,9 @@ const VolunteerProfile = require('../models/VolunteerProfile');
 const Sponsor = require('../models/Sponsor');
 const ActivityLog = require('../models/ActivityLog');
 const Opportunity = require('../models/Opportunity');
+const Campaign = require('../models/Campaign');
+const ErrorResponse = require('../utils/errorResponse');
+const asyncHandler = require('../utils/asyncHandler');
 
 const ROLES = [
   'visitor',
@@ -20,62 +23,105 @@ const ROLES = [
  * @route   GET /api/admin/users
  * @access  Private (Admin only)
  */
-const getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find().sort({ createdAt: -1 });
-    res.status(200).json({
-      success: true,
-      count: users.length,
-      data: users,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+const getAllUsers = asyncHandler(async (req, res, next) => {
+  const users = await User.find().sort({ createdAt: -1 });
+  res.status(200).json({
+    success: true,
+    count: users.length,
+    data: users,
+  });
+});
 
 /**
- * @desc    Get admin dashboard stats
+ * @desc    Get admin dashboard — stats, activity feed, campaign goal, search
  * @route   GET /api/admin/dashboard
  * @access  Private (Admin only)
  */
-const getDashboard = async (req, res) => {
-  try {
-    // Count users per role
-    const roleCountsArr = await User.aggregate([
-      { $group: { _id: '$role', count: { $sum: 1 } } },
-    ]);
+const getDashboard = asyncHandler(async (req, res, next) => {
+  const { search } = req.query;
 
-    // Convert to a clean object, ensuring all roles are present
-    const roleCounts = ROLES.reduce((acc, role) => {
-      acc[role] = 0;
-      return acc;
-    }, {});
-    roleCountsArr.forEach(({ _id, count }) => {
-      roleCounts[_id] = count;
-    });
+  // ── 1. Stat Cards ─────────────────────────────────────────
+  const roleCountsArr = await User.aggregate([
+    { $group: { _id: '$role', count: { $sum: 1 } } },
+  ]);
+  const roleCounts = ROLES.reduce((acc, role) => { acc[role] = 0; return acc; }, {});
+  roleCountsArr.forEach(({ _id, count }) => { roleCounts[_id] = count; });
 
-    // Get pending partner approvals
-    const pendingPartners = await User.find({
-      role: 'partner',
-      isApproved: false,
-    }).select('-__v');
+  // Pending Approvals: partners awaiting approval
+  const pendingApprovalsCount = await User.countDocuments({ role: 'partner', isApproved: false });
+  // Pending Donations: in-kind donors without confirmed pickup
+  const pendingDonationsCount = await User.countDocuments({ role: 'donor', isApproved: false });
+  // Active Campaigns
+  const activeCampaignsCount = await Campaign.countDocuments({ isActive: true });
 
-    const totalUsers = await User.countDocuments();
+  // ── 2. Recent Activity Feed ────────────────────────────────
+  const recentActivity = await ActivityLog.find()
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .populate('userId', 'firstName lastName role');
 
-    res.status(200).json({
-      success: true,
-      data: {
-        totalUsers,
-        roleCounts,
-        pendingPartners,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  const formattedActivity = recentActivity.map(log => ({
+    _id: log._id,
+    type: log.type,
+    content: log.content,
+    user: log.userId
+      ? { _id: log.userId._id, name: `${log.userId.firstName} ${log.userId.lastName}`, role: log.userId.role }
+      : null,
+    relatedId: log.relatedId,
+    relatedModel: log.relatedModel,
+    createdAt: log.createdAt,
+  }));
+
+  // ── 3. Active Campaign Goal Widget ────────────────────────
+  const activeCampaign = await Campaign.findOne({ isActive: true, goalAmount: { $gt: 0 } })
+    .sort({ createdAt: -1 })
+    .select('title goalAmount raisedAmount goalDeadline imageUrl');
+
+  let campaignGoal = null;
+  if (activeCampaign) {
+    const pct = activeCampaign.goalAmount > 0
+      ? Math.round((activeCampaign.raisedAmount / activeCampaign.goalAmount) * 100)
+      : 0;
+    const daysLeft = activeCampaign.goalDeadline
+      ? Math.max(0, Math.ceil((new Date(activeCampaign.goalDeadline) - Date.now()) / 86400000))
+      : null;
+    campaignGoal = {
+      _id: activeCampaign._id,
+      title: activeCampaign.title,
+      goalAmount: activeCampaign.goalAmount,
+      raisedAmount: activeCampaign.raisedAmount,
+      percentageReached: pct,
+      daysRemaining: daysLeft,
+      imageUrl: activeCampaign.imageUrl,
+    };
   }
-};
+
+  // ── 4. Campaign Search ────────────────────────────────────
+  let campaigns = null;
+  if (search) {
+    campaigns = await Campaign.find({
+      title: { $regex: search, $options: 'i' },
+    }).select('title isActive goalAmount raisedAmount');
+  }
+
+  // ── 5. Response ───────────────────────────────────────────
+  res.status(200).json({
+    success: true,
+    data: {
+      stats: {
+        totalParticipants: roleCounts.participant,
+        totalVolunteers: roleCounts.volunteer,
+        totalPartners: roleCounts.partner,
+        pendingApprovals: pendingApprovalsCount,
+        pendingDonations: pendingDonationsCount,
+        activeCampaigns: activeCampaignsCount,
+      },
+      recentActivity: formattedActivity,
+      campaignGoal,
+      ...(campaigns !== null && { searchResults: campaigns }),
+    },
+  });
+});
 
 /**
  * @desc    Update a partner's approval status
@@ -83,107 +129,85 @@ const getDashboard = async (req, res) => {
  * @access  Private (Admin only)
  * :id — the PartnerProfile document _id
  */
-const updatePartnerStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
+const updatePartnerStatus = asyncHandler(async (req, res, next) => {
+  const { status } = req.body;
 
-    if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be either 'approved' or 'rejected'",
-      });
-    }
-
-    const profile = await PartnerProfile.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true }
-    );
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Partner profile not found',
-      });
-    }
-
-    // Keep User.isApproved in sync for the dashboard query
-    await User.findByIdAndUpdate(profile.userId, {
-      isApproved: status === 'approved',
-    });
-
-    // Activity Log
-    if (status === 'approved') {
-      await ActivityLog.create({
-        userId: profile.userId,
-        type: 'Submission Approved',
-        content: `Your organization "${profile.orgName}" has been approved. You can now list events on the Hive calendar.`,
-        relatedId: profile._id,
-        relatedModel: 'PartnerProfile',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: `Partner status updated to '${status}'.`,
-      data: profile,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  if (!['approved', 'rejected'].includes(status)) {
+    return next(new ErrorResponse("Status must be either 'approved' or 'rejected'", 400));
   }
-};
+
+  const profile = await PartnerProfile.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true, runValidators: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Partner profile not found', 404));
+  }
+
+  // Keep User.isApproved in sync for the dashboard query
+  await User.findByIdAndUpdate(profile.userId, {
+    isApproved: status === 'approved',
+  });
+
+  // Activity Log
+  if (status === 'approved') {
+    await ActivityLog.create({
+      userId: profile.userId,
+      type: 'Submission Approved',
+      content: `Your organization "${profile.orgName}" has been approved. You can now list events on the Hive calendar.`,
+      relatedId: profile._id,
+      relatedModel: 'PartnerProfile',
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Partner status updated to '${status}'.`,
+    data: profile,
+  });
+});
 
 /**
  * @desc    Update an opportunity/event approval status
  * @route   PATCH /api/admin/opportunities/:id/status
  * @access  Private (Admin only)
  */
-const updateOpportunityStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
+const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
+  const { status } = req.body;
 
-    if (!['active', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be either 'active' or 'rejected'",
-      });
-    }
-
-    const opportunity = await Opportunity.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true }
-    );
-
-    if (!opportunity) {
-      return res.status(404).json({
-        success: false,
-        message: 'Opportunity not found',
-      });
-    }
-
-    // Activity Log
-    await ActivityLog.create({
-      userId: opportunity.partnerId,
-      type: status === 'active' ? 'Submission Approved' : 'Profile Updated',
-      content: status === 'active' 
-        ? `Your event "${opportunity.title}" has been approved.` 
-        : `Your event "${opportunity.title}" was rejected.`,
-      relatedId: opportunity._id,
-      relatedModel: 'Opportunity',
-    });
-
-    res.status(200).json({
-      success: true,
-      message: `Opportunity status updated to '${status}'.`,
-      data: opportunity,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  if (!['active', 'rejected'].includes(status)) {
+    return next(new ErrorResponse("Status must be either 'active' or 'rejected'", 400));
   }
-};
+
+  const opportunity = await Opportunity.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true, runValidators: true }
+  );
+
+  if (!opportunity) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+
+  // Activity Log
+  await ActivityLog.create({
+    userId: opportunity.partnerId,
+    type: status === 'active' ? 'Submission Approved' : 'Profile Updated',
+    content: status === 'active' 
+      ? `Your event "${opportunity.title}" has been approved.` 
+      : `Your event "${opportunity.title}" was rejected.`,
+    relatedId: opportunity._id,
+    relatedModel: 'Opportunity',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Opportunity status updated to '${status}'.`,
+    data: opportunity,
+  });
+});
 
 /**
  * @desc    Add hours to a volunteer's totalHours
@@ -191,121 +215,425 @@ const updateOpportunityStatus = async (req, res) => {
  * @access  Private (Admin only)
  * :id — the VolunteerProfile document _id
  */
-const addVolunteerHours = async (req, res) => {
-  try {
-    const { hours } = req.body;
+const addVolunteerHours = asyncHandler(async (req, res, next) => {
+  const { hours } = req.body;
 
-    if (!hours || typeof hours !== 'number' || hours <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a positive number for hours',
-      });
-    }
-
-    const profile = await VolunteerProfile.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { totalHours: hours } }, // atomic increment
-      { new: true }
-    );
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Volunteer profile not found',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: `Added ${hours} hours. Total hours: ${profile.totalHours}.`,
-      data: profile,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  if (!hours || typeof hours !== 'number' || hours <= 0) {
+    return next(new ErrorResponse('Please provide a positive number for hours', 400));
   }
-};
+
+  const profile = await VolunteerProfile.findByIdAndUpdate(
+    req.params.id,
+    { $inc: { totalHours: hours } }, // atomic increment
+    { new: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Volunteer profile not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Added ${hours} hours. Total hours: ${profile.totalHours}.`,
+    data: profile,
+  });
+});
 
 /**
  * @desc    Get financial overview — total raised from all sponsors
  * @route   GET /api/admin/finances
  * @access  Private (Admin only)
  */
-const getFinances = async (req, res) => {
-  try {
-    const [aggregate] = await Sponsor.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalRaised: { $sum: '$totalContributed' },
-          sponsorCount: { $sum: 1 },
-          goldCount: { $sum: { $cond: [{ $eq: ['$tier', 'Gold'] }, 1, 0] } },
-          silverCount: { $sum: { $cond: [{ $eq: ['$tier', 'Silver'] }, 1, 0] } },
-          bronzeCount: { $sum: { $cond: [{ $eq: ['$tier', 'Bronze'] }, 1, 0] } },
-        },
+const getFinances = asyncHandler(async (req, res, next) => {
+  const [aggregate] = await Sponsor.aggregate([
+    {
+      $group: {
+        _id: null,
+        totalRaised: { $sum: '$totalContributed' },
+        sponsorCount: { $sum: 1 },
+        goldCount: { $sum: { $cond: [{ $eq: ['$tier', 'Gold'] }, 1, 0] } },
+        silverCount: { $sum: { $cond: [{ $eq: ['$tier', 'Silver'] }, 1, 0] } },
+        bronzeCount: { $sum: { $cond: [{ $eq: ['$tier', 'Bronze'] }, 1, 0] } },
       },
-    ]);
+    },
+  ]);
 
-    const topSponsors = await Sponsor.find({ isAnonymous: false })
-      .sort({ totalContributed: -1 })
-      .limit(5)
-      .populate('userId', 'name email');
+  const topSponsors = await Sponsor.find({ isAnonymous: false })
+    .sort({ totalContributed: -1 })
+    .limit(5)
+    .populate('userId', 'firstName lastName email');
 
-    res.status(200).json({
-      success: true,
-      data: {
-        totalRaised: aggregate?.totalRaised ?? 0,
-        sponsorCount: aggregate?.sponsorCount ?? 0,
-        tierBreakdown: {
-          Gold: aggregate?.goldCount ?? 0,
-          Silver: aggregate?.silverCount ?? 0,
-          Bronze: aggregate?.bronzeCount ?? 0,
-          Supporter: (aggregate?.sponsorCount ?? 0) -
-            (aggregate?.goldCount ?? 0) -
-            (aggregate?.silverCount ?? 0) -
-            (aggregate?.bronzeCount ?? 0),
-        },
-        topSponsors,
+  res.status(200).json({
+    success: true,
+    data: {
+      totalRaised: aggregate?.totalRaised ?? 0,
+      sponsorCount: aggregate?.sponsorCount ?? 0,
+      tierBreakdown: {
+        Gold: aggregate?.goldCount ?? 0,
+        Silver: aggregate?.silverCount ?? 0,
+        Bronze: aggregate?.bronzeCount ?? 0,
+        Supporter: (aggregate?.sponsorCount ?? 0) -
+          (aggregate?.goldCount ?? 0) -
+          (aggregate?.silverCount ?? 0) -
+          (aggregate?.bronzeCount ?? 0),
       },
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+      topSponsors,
+    },
+  });
+});
 
 /**
  * @desc    Get summary of all participants (masked names for privacy)
  * @route   GET /api/admin/participants/summary
  * @access  Private (Admin only)
  */
-const getParticipantSummary = async (req, res) => {
-  try {
-    const users = await User.find({ role: 'participant' }).select('name email role createdAt');
-    
-    // Mask names: "John Doe" -> "John D."
-    const maskedUsers = users.map(user => {
-      const parts = user.name.split(' ');
-      const maskedName = parts.length > 1 
-        ? `${parts[0]} ${parts[1][0]}.` 
-        : user.name;
-        
-      return {
-        ...user._doc,
-        name: maskedName
-      };
-    });
+const getParticipantSummary = asyncHandler(async (req, res, next) => {
+  const users = await User.find({ role: 'participant' }).select('firstName lastName email role createdAt');
+  
+  // Mask names: "John Doe" -> "John D."
+  const maskedUsers = users.map(user => {
+    const maskedName = user.lastName 
+      ? `${user.firstName} ${user.lastName[0]}.` 
+      : user.firstName;
+      
+    return {
+      ...user._doc,
+      name: maskedName
+    };
+  });
 
-    res.status(200).json({
-      success: true,
-      count: maskedUsers.length,
-      data: maskedUsers
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  res.status(200).json({
+    success: true,
+    count: maskedUsers.length,
+    data: maskedUsers
+  });
+});
+
+const ParticipantProfile = require('../models/ParticipantProfile');
+
+/**
+ * @desc    List participants with pagination, search, and status filter (Admin)
+ * @route   GET /api/admin/participants
+ * @access  Private (Admin only)
+ */
+const adminListParticipants = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, status, housingStatus } = req.query;
+
+  // Build user filter
+  const userQuery = { role: 'participant' };
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    userQuery.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
   }
-};
+  const matchingUsers = await User.find(userQuery).select('_id firstName lastName email');
+  const userIds = matchingUsers.map(u => u._id);
+
+  // Build profile filter
+  const profileQuery = { userId: { $in: userIds } };
+  if (status) profileQuery.accountStatus = status;
+  if (housingStatus) profileQuery.housingStatus = housingStatus;
+
+  const total = await ParticipantProfile.countDocuments(profileQuery);
+  const profiles = await ParticipantProfile.find(profileQuery)
+    .populate('userId', 'firstName lastName email createdAt')
+    .select('participantId housingStatus address accountStatus intakeStatus gender')
+    .skip(skip)
+    .limit(limit)
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: profiles.length,
+    data: profiles,
+  });
+});
+
+/**
+ * @desc    Get full participant detail for admin view
+ * @route   GET /api/admin/participants/:id
+ * @access  Private (Admin only)
+ */
+const adminGetParticipant = asyncHandler(async (req, res, next) => {
+  const profile = await ParticipantProfile.findById(req.params.id)
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt isApproved');
+  if (!profile) return next(new ErrorResponse('Participant not found', 404));
+  res.status(200).json({ success: true, data: profile });
+});
+
+/**
+ * @desc    Update participant profile fields (Admin Edit)
+ * @route   PATCH /api/admin/participants/:id
+ * @access  Private (Admin only)
+ */
+const adminUpdateParticipant = asyncHandler(async (req, res, next) => {
+  const allowed = [
+    'housingStatus', 'address', 'unhousedDetails', 'householdSize',
+    'childrenCount', 'seniorsCount', 'petsCount', 'dietaryRestrictions',
+    'isVeteran', 'hasDisability', 'gender', 'raceEthnicity', 'primaryLanguage',
+    'monthlyIncome', 'citizenStatus', 'assistancePrograms', 'accountStatus', 'interests'
+  ];
+  const updates = {};
+  allowed.forEach(key => { if (req.body[key] !== undefined) updates[key] = req.body[key]; });
+
+  const profile = await ParticipantProfile.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+  if (!profile) return next(new ErrorResponse('Participant not found', 404));
+  res.status(200).json({ success: true, data: profile });
+});
+
+/**
+ * @desc    Deactivate a participant account
+ * @route   PATCH /api/admin/participants/:id/deactivate
+ * @access  Private (Admin only)
+ */
+const adminDeactivateParticipant = asyncHandler(async (req, res, next) => {
+  const profile = await ParticipantProfile.findByIdAndUpdate(
+    req.params.id,
+    { accountStatus: 'INACTIVE' },
+    { new: true }
+  );
+  if (!profile) return next(new ErrorResponse('Participant not found', 404));
+  res.status(200).json({ success: true, message: 'Participant deactivated.', data: profile });
+});
+
+/**
+ * @desc    Export all participant records as a CSV file
+ * @route   GET /api/admin/participants/export
+ * @access  Private (Admin only)
+ */
+const adminExportParticipantsCSV = asyncHandler(async (req, res, next) => {
+  const profiles = await ParticipantProfile.find()
+    .populate('userId', 'firstName lastName email phone createdAt');
+
+  const rows = [
+    ['Participant ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Housing Status',
+     'City', 'Account Status', 'Intake %', 'Gender', 'Monthly Income', 'Registered At'].join(',')
+  ];
+
+  profiles.forEach(p => {
+    const u = p.userId || {};
+    rows.push([
+      p.participantId || '',
+      u.firstName || '', u.lastName || '', u.email || '', u.phone || '',
+      p.housingStatus || '',
+      p.address?.city || '',
+      p.accountStatus || '',
+      p.intakeStatus?.percentage || 0,
+      p.gender || '',
+      p.monthlyIncome || 0,
+      u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : ''
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="participants.csv"');
+  res.status(200).send(rows.join('\n'));
+});
+
+const InKindDonation = require('../models/InKindDonation');
+
+/**
+ * @desc    List all in-kind donations with stats and pagination
+ * @route   GET /api/admin/in-kind-donations
+ * @access  Private (Admin only)
+ */
+const adminListInKindDonations = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // Calculate Dashboard Stats
+  // 1. Pending Review Count
+  const pendingReviewCount = await InKindDonation.countDocuments({ status: 'pending' });
+
+  // 2. Approved This Week
+  const startOfWeek = new Date();
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  const approvedThisWeekCount = await InKindDonation.countDocuments({
+    status: 'approved',
+    updatedAt: { $gte: startOfWeek }
+  });
+
+  // 3. Scheduled Pickups Today
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  const scheduledPickupsTodayCount = await InKindDonation.countDocuments({
+    status: 'scheduled',
+    pickupDate: { $gte: startOfDay, $lte: endOfDay }
+  });
+
+  // Fetch Paginated List
+  const total = await InKindDonation.countDocuments();
+  const donations = await InKindDonation.find()
+    .populate('donorId', 'firstName lastName')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    stats: {
+      pendingReviewCount,
+      approvedThisWeekCount,
+      scheduledPickupsTodayCount
+    },
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: donations.length
+    },
+    data: donations
+  });
+});
+
+/**
+ * @desc    Update an In-Kind Donation status
+ * @route   PATCH /api/admin/in-kind-donations/:id/status
+ * @access  Private (Admin only)
+ */
+const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
+  const { status, rejectionReason, locationName, storageRoom, storageRack, storageShelf, storageFloor } = req.body;
+
+  if (!['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
+    return next(new ErrorResponse('Invalid status', 400));
+  }
+
+  const updates = { status };
+  if (status === 'rejected' && rejectionReason) updates.rejectionReason = rejectionReason;
+  
+  if (locationName) updates.locationName = locationName;
+  if (storageRoom !== undefined || storageRack !== undefined || storageShelf !== undefined || storageFloor !== undefined) {
+    updates['storageDetails.room'] = storageRoom;
+    updates['storageDetails.rack'] = storageRack;
+    updates['storageDetails.shelf'] = storageShelf;
+    updates['storageDetails.floor'] = storageFloor;
+  }
+
+  const donation = await InKindDonation.findByIdAndUpdate(
+    req.params.id,
+    updates,
+    { new: true, runValidators: true }
+  );
+
+  if (!donation) {
+    return next(new ErrorResponse('Donation not found', 404));
+  }
+
+  // Activity Log integration
+  await ActivityLog.create({
+    userId: donation.donorId,
+    type: 'Profile Updated', // Using closest existing enum until ActivityLog is updated for specific donation changes
+    content: `Your in-kind donation of "${donation.itemName}" is now ${status}.`,
+    relatedId: donation._id,
+    relatedModel: 'InKindDonation',
+  });
+
+  res.status(200).json({ success: true, data: donation });
+});
+
+/**
+ * @desc    Export in-kind donations to CSV
+ * @route   GET /api/admin/in-kind-donations/export
+ * @access  Private (Admin only)
+ */
+const adminExportInKindDonationsCSV = asyncHandler(async (req, res, next) => {
+  const donations = await InKindDonation.find().populate('donorId', 'firstName lastName');
+
+  const headers = [
+    'Ref ID', 'Donor Name', 'Item Name', 'Category', 'Quantity', 
+    'Delivery Method', 'Destination', 'Storage Room', 'Status', 'Date Submitted'
+  ];
+
+  const rows = [headers.join(',')];
+
+  donations.forEach(d => {
+    const donorName = d.donorId ? `${d.donorId.firstName} ${d.donorId.lastName}` : 'Unknown';
+    const dest = d.locationName || '';
+    const storage = d.storageDetails?.room ? `${d.storageDetails.room} ${d.storageDetails.rack || ''} ${d.storageDetails.shelf || ''}`.trim() : '';
+    const row = [
+      d.refId,
+      donorName,
+      d.itemName,
+      d.itemCategory,
+      d.quantity || '',
+      d.deliveryMethod || '',
+      dest,
+      storage,
+      d.status,
+      d.createdAt.toISOString().split('T')[0]
+    ].map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(',');
+    rows.push(row);
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="in_kind_donations.csv"');
+  res.status(200).send(rows.join('\n'));
+});
+
+/**
+ * @desc    Get a single in-kind donation by ID
+ * @route   GET /api/admin/in-kind-donations/:id
+ * @access  Private (Admin only)
+ */
+const adminGetInKindDonation = asyncHandler(async (req, res, next) => {
+  const donation = await InKindDonation.findById(req.params.id)
+    .populate('donorId', 'firstName lastName email phone profilePictureUrl');
+  
+  if (!donation) {
+    return next(new ErrorResponse('Donation not found', 404));
+  }
+
+  res.status(200).json({ success: true, data: donation });
+});
+
+/**
+ * @desc    Update volunteer profile (Admin)
+ * @route   PATCH /api/admin/volunteers/:id
+ * @access  Private (Admin only)
+ * :id — the VolunteerProfile document _id
+ */
+const adminUpdateVolunteerProfile = asyncHandler(async (req, res, next) => {
+  const profile = await VolunteerProfile.findByIdAndUpdate(
+    req.params.id,
+    { $set: req.body },
+    { new: true, runValidators: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Volunteer profile not found', 404));
+  }
+
+  res.status(200).json({ success: true, data: profile });
+});
+
+/**
+ * @desc    Update sponsor profile (Admin)
+ * @route   PATCH /api/admin/sponsors/:id
+ * @access  Private (Admin only)
+ * :id — the Sponsor document _id
+ */
+const adminUpdateSponsorProfile = asyncHandler(async (req, res, next) => {
+  const profile = await Sponsor.findByIdAndUpdate(
+    req.params.id,
+    { $set: req.body },
+    { new: true, runValidators: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Sponsor profile not found', 404));
+  }
+
+  res.status(200).json({ success: true, data: profile });
+});
 
 module.exports = { 
   getAllUsers, 
@@ -314,5 +642,16 @@ module.exports = {
   updateOpportunityStatus,
   addVolunteerHours, 
   getFinances, 
-  getParticipantSummary 
+  getParticipantSummary,
+  adminListParticipants,
+  adminGetParticipant,
+  adminUpdateParticipant,
+  adminDeactivateParticipant,
+  adminExportParticipantsCSV,
+  adminListInKindDonations,
+  adminUpdateInKindDonationStatus,
+  adminExportInKindDonationsCSV,
+  adminGetInKindDonation,
+  adminUpdateVolunteerProfile,
+  adminUpdateSponsorProfile,
 };

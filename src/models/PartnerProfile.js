@@ -12,16 +12,23 @@ const PartnerProfileSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Organization name is required'],
       trim: true,
+      maxlength: [100, 'Organization name cannot be more than 100 characters'],
     },
     orgType: {
       type: String,
       trim: true,
+      maxlength: [50, 'Organization type cannot be more than 50 characters'],
     },
     address: {
       type: String,
       trim: true,
+      maxlength: [200, 'Address cannot be more than 200 characters'],
     },
     website: {
+      type: String,
+      trim: true,
+    },
+    organizationLogoUrl: {
       type: String,
       trim: true,
     },

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
+const upload = require('../middleware/uploadMiddleware');
 const {
   submitProfile,
   getMyProfile,
@@ -29,7 +30,7 @@ router.use(authorize('partner'));
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required:
@@ -47,23 +48,15 @@ router.use(authorize('partner'));
  *               website:
  *                 type: string
  *                 example: 'https://acme.org'
+ *               organizationLogo:
+ *                 type: string
+ *                 format: binary
  *               intendedRoles:
- *                 type: array
- *                 items:
- *                   type: string
- *                 example: ["Donating food", "Hosting events", "Mentoring youth"]
+ *                 type: string
+ *                 description: JSON string or comma-separated roles.
  *               agreements:
- *                 type: object
- *                 properties:
- *                   isAuthorized:
- *                     type: boolean
- *                     example: true
- *                   agreedToTerms:
- *                     type: boolean
- *                     example: true
- *                   understandOperationalControl:
- *                     type: boolean
- *                     example: true
+ *                 type: string
+ *                 description: JSON string of agreements object.
  *     responses:
  *       200:
  *         description: Profile submitted successfully. Awaiting admin review.
@@ -74,7 +67,7 @@ router.use(authorize('partner'));
  *       400:
  *         description: Validation error (e.g., missing orgName).
  */
-router.post('/profile', submitProfile);
+router.post('/profile', upload.single('organizationLogo'), submitProfile);
 
 /**
  * @swagger
@@ -100,8 +93,31 @@ router.get('/dashboard', getDashboardData);
  *   post:
  *     summary: Create a new volunteer opportunity or event (Partner only)
  *     tags: [Partners, Opportunities]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               location: { type: string }
+ *               date: { type: string, format: date-time }
+ *               time: { type: string }
+ *               endTime: { type: string }
+ *               category: { type: string }
+ *               requiredVolunteers: { type: integer }
+ *               type: { type: string, enum: [event, opportunity] }
+ *               flyer: { type: string, format: binary }
+ *               impactStatement: { type: string }
+ *               physicalRequirements: { type: string }
+ *               dressCode: { type: string }
+ *               orientation: { type: string }
  */
-router.post('/opportunities', createOpportunity);
+router.post('/opportunities', upload.single('flyer'), createOpportunity);
 
 /**
  * @swagger
@@ -147,13 +163,15 @@ router.get('/opportunities/partner', getMyOpportunities);
  *           type: string
  *     requestBody:
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/Opportunity'
- *     responses:
- *       200:
- *         description: Opportunity updated successfully.
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               flyer: { type: string, format: binary }
+ *               # ... other fields
  */
-router.patch('/opportunities/:id', updateOpportunity);
+router.patch('/opportunities/:id', upload.single('flyer'), updateOpportunity);
 
 module.exports = router;

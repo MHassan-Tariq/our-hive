@@ -10,8 +10,28 @@ const ActivityLog = require('../models/ActivityLog');
  */
 const submitProfile = async (req, res) => {
   try {
-    const { orgName, orgType, address, website, intendedRoles, agreements } =
+    let { orgName, orgType, address, website, intendedRoles, agreements } =
       req.body;
+
+    // Handle file upload
+    let organizationLogoUrl = req.body.organizationLogoUrl;
+    if (req.file) {
+      organizationLogoUrl = req.file.path;
+    }
+
+    // Handle stringified fields from multipart form
+    if (typeof intendedRoles === 'string') {
+      try {
+        intendedRoles = JSON.parse(intendedRoles);
+      } catch (e) {
+        intendedRoles = intendedRoles.split(',').map(r => r.trim());
+      }
+    }
+    if (typeof agreements === 'string') {
+      try {
+        agreements = JSON.parse(agreements);
+      } catch (e) {}
+    }
 
     // Upsert: create if not exists, update if it does
     const profile = await PartnerProfile.findOneAndUpdate(
@@ -22,6 +42,7 @@ const submitProfile = async (req, res) => {
         orgType,
         address,
         website,
+        organizationLogoUrl,
         intendedRoles,
         agreements,
       },
@@ -61,7 +82,7 @@ const getMyProfile = async (req, res) => {
   try {
     const profile = await PartnerProfile.findOne({
       userId: req.user._id,
-    }).populate('userId', 'name email');
+    }).populate('userId', 'firstName lastName email');
 
     if (!profile) {
       return res.status(404).json({
@@ -146,25 +167,53 @@ const createOpportunity = async (req, res) => {
       title,
       description,
       location,
+      specificLocation,
+      whatToBring,
       date,
       time,
+      endTime,
       category,
       requiredVolunteers,
       type,
-      flyerUrl,
+      impactStatement,
+      physicalRequirements,
+      dressCode,
+      orientation,
     } = req.body;
+
+    // Handle stringified fields from multipart form
+    if (typeof whatToBring === 'string') {
+      try {
+        whatToBring = JSON.parse(whatToBring);
+      } catch (e) {
+        whatToBring = whatToBring.split(',').map(item => item.trim());
+      }
+    }
+
+    // Handle file upload
+    let flyerUrl = req.body.flyerUrl;
+    if (req.file) {
+      flyerUrl = req.file.path;
+    }
 
     const opportunity = await Opportunity.create({
       partnerId: req.user._id,
       title,
       description,
       location,
+      specificLocation,
+      whatToBring,
       date,
       time,
+      endTime,
       category,
       requiredVolunteers,
       type: type || 'opportunity',
       flyerUrl,
+      impactStatement,
+      physicalRequirements,
+      dressCode,
+      orientation,
       status: 'pending', // Explicitly set to pending for review
     });
 
@@ -208,30 +257,69 @@ const updateOpportunity = async (req, res) => {
       location,
       date,
       time,
+      endTime,
       category,
       requiredVolunteers,
       type,
-      flyerUrl,
+      impactStatement,
+      physicalRequirements,
+      dressCode,
+      orientation,
+      specificLocation,
+      whatToBring,
     } = req.body;
+
+    // Handle stringified fields from multipart form
+    let parsedWhatToBring = whatToBring;
+    if (typeof whatToBring === 'string') {
+      try {
+        parsedWhatToBring = JSON.parse(whatToBring);
+      } catch (e) {
+        parsedWhatToBring = whatToBring.split(',').map(item => item.trim());
+      }
+    }
+
+    // Handle file upload
+    let flyerUrl = opportunity.flyerUrl;
+    if (req.file) {
+      flyerUrl = req.file.path;
+    }
 
     // Check if any fields that require re-approval are being updated
     const fieldsRequiringReapproval = [
       'title',
       'description',
       'location',
+      'specificLocation',
+      'whatToBring',
       'date',
       'time',
+      'endTime',
       'category',
       'requiredVolunteers',
       'type',
       'flyerUrl',
+      'impactStatement',
+      'physicalRequirements',
+      'dressCode',
+      'orientation',
     ];
 
     let needsReapproval = false;
+    const updateFields = {};
+
     for (const field of fieldsRequiringReapproval) {
-      if (req.body[field] !== undefined && req.body[field] !== opportunity[field]) {
+      let newValue;
+      if (field === 'flyerUrl') {
+        newValue = flyerUrl;
+      } else if (field === 'whatToBring') {
+        newValue = parsedWhatToBring;
+      } else {
+        newValue = req.body[field];
+      }
+
+      if (newValue !== undefined && JSON.stringify(newValue) !== JSON.stringify(opportunity[field])) {
         needsReapproval = true;
-        break;
       }
     }
 
@@ -239,12 +327,19 @@ const updateOpportunity = async (req, res) => {
     opportunity.title = title || opportunity.title;
     opportunity.description = description || opportunity.description;
     opportunity.location = location || opportunity.location;
+    opportunity.specificLocation = specificLocation || opportunity.specificLocation;
+    opportunity.whatToBring = parsedWhatToBring || opportunity.whatToBring;
     opportunity.date = date || opportunity.date;
     opportunity.time = time || opportunity.time;
+    opportunity.endTime = endTime || opportunity.endTime;
     opportunity.category = category || opportunity.category;
     opportunity.requiredVolunteers = requiredVolunteers || opportunity.requiredVolunteers;
     opportunity.type = type || opportunity.type;
     opportunity.flyerUrl = flyerUrl || opportunity.flyerUrl;
+    opportunity.impactStatement = impactStatement || opportunity.impactStatement;
+    opportunity.physicalRequirements = physicalRequirements || opportunity.physicalRequirements;
+    opportunity.dressCode = dressCode || opportunity.dressCode;
+    opportunity.orientation = orientation || opportunity.orientation;
 
     // If significant fields are updated, set status back to pending for review
     if (needsReapproval && opportunity.status !== 'pending') {

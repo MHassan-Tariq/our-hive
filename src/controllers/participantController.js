@@ -1,6 +1,8 @@
 const ParticipantProfile = require('../models/ParticipantProfile');
 const Opportunity = require('../models/Opportunity');
 const InKindDonation = require('../models/InKindDonation');
+const User = require('../models/User');
+const Campaign = require('../models/Campaign');
 const crypto = require('crypto');
 
 /**
@@ -10,17 +12,116 @@ const crypto = require('crypto');
  */
 exports.saveProfile = async (req, res) => {
   try {
-    const { interests, residenceArea } = req.body;
+    const { 
+      firstName,
+      lastName,
+      phone,
+      interests, 
+      housingStatus, 
+      address, 
+      unhousedDetails,
+      householdSize,
+      childrenCount,
+      seniorsCount,
+      petsCount,
+      dietaryRestrictions,
+      isVeteran,
+      hasDisability,
+      monthlyIncome,
+      citizenStatus,
+      assistancePrograms,
+      consentToInformationUse
+    } = req.body;
+
+    // Update User model if personal info is provided
+    if (firstName || lastName || phone) {
+      const userUpdates = {};
+      if (firstName) userUpdates.firstName = firstName;
+      if (lastName) userUpdates.lastName = lastName;
+      if (phone) userUpdates.phone = phone;
+      
+      await User.findByIdAndUpdate(req.user._id, userUpdates, { new: true, runValidators: true });
+    }
 
     const profile = await ParticipantProfile.findOneAndUpdate(
       { userId: req.user._id },
-      { interests, residenceArea },
+      { 
+        interests, 
+        housingStatus, 
+        address, 
+        unhousedDetails,
+        householdSize,
+        childrenCount,
+        seniorsCount,
+        petsCount,
+        dietaryRestrictions,
+        isVeteran,
+        hasDisability,
+        monthlyIncome,
+        citizenStatus,
+        assistancePrograms,
+        consentToInformationUse
+      },
       { new: true, upsert: true, runValidators: true }
     );
 
     res.status(200).json({
       success: true,
       data: profile
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Get Participant Profile (Full Profile details)
+ * @route   GET /api/participant/profile
+ * @access  Private (Participant)
+ */
+exports.getParticipantProfile = async (req, res) => {
+  try {
+    const profile = await ParticipantProfile.findOne({ userId: req.user._id })
+      .populate('userId', 'firstName lastName email phone profilePictureUrl');
+
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Profile not found.' });
+    }
+
+    // Format the response to map nicely to the UI
+    res.status(200).json({
+      success: true,
+      data: {
+        personalInfo: {
+          firstName: profile.userId.firstName,
+          lastName: profile.userId.lastName,
+          email: profile.userId.email,
+          phone: profile.userId.phone || '',
+          profilePictureUrl: profile.userId.profilePictureUrl || ''
+        },
+        participantId: profile.participantId,
+        householdDetails: {
+          householdSize: profile.householdSize,
+          childrenCount: profile.childrenCount,
+          seniorsCount: profile.seniorsCount,
+          petsCount: profile.petsCount
+        },
+        address: profile.address,
+        unhousedDetails: profile.unhousedDetails,
+        housingStatus: profile.housingStatus,
+        documents: profile.documents,
+        intakeStatus: profile.intakeStatus,
+        interests: profile.interests,
+        dietaryRestrictions: profile.dietaryRestrictions,
+        isVeteran: profile.isVeteran,
+        hasDisability: profile.hasDisability,
+        monthlyIncome: profile.monthlyIncome,
+        citizenStatus: profile.citizenStatus,
+        assistancePrograms: profile.assistancePrograms,
+        consentToInformationUse: profile.consentToInformationUse,
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt
+      }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -108,6 +209,311 @@ exports.requestService = async (req, res) => {
       success: true,
       message: 'Voucher generated successfully',
       data: profile.vouchers[profile.vouchers.length - 1]
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+/**
+ * @desc    Get Participant Dashboard Data
+ * @route   GET /api/participant/dashboard
+ * @access  Private (Participant)
+ */
+exports.getParticipantDashboard = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    let profile = await ParticipantProfile.findOne({ userId: req.user._id });
+
+    if (!profile) {
+      profile = await ParticipantProfile.create({ userId: req.user._id });
+    }
+
+    // Get community updates (active campaigns)
+    const updates = await Campaign.find({ isActive: true })
+      .select('title description imageUrl category createdAt')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // Get the next upcoming distribution (closest future active opportunity)
+    const nextDistribution = await Opportunity.findOne({
+      status: 'active',
+      date: { $gte: new Date() } // Future or today events
+    }).sort({ date: 1, time: 1 }); // Closest first
+
+    // Calculate missing documents (Expected: ID, Proof of Residence, Proof of Income = 3 documents)
+    const uploadedDocumentTypes = new Set(
+      profile.documents
+        .filter(doc => doc.status === 'pending' || doc.status === 'approved')
+        .map(doc => doc.documentType)
+    );
+    const requiredDocumentTypes = ['ID', 'Proof of Residence', 'Proof of Income'];
+    const missingCount = requiredDocumentTypes.filter(type => !uploadedDocumentTypes.has(type)).length;
+
+    const dashboardData = {
+      user: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+      },
+      intakeStatus: profile.intakeStatus,
+      communityUpdates: updates,
+      nextDistribution: nextDistribution ? {
+        id: nextDistribution._id,
+        title: nextDistribution.title,
+        date: nextDistribution.date,
+        time: nextDistribution.time,
+        endTime: nextDistribution.endTime,
+        location: nextDistribution.location,
+        specificLocation: nextDistribution.specificLocation
+      } : null,
+      documentsStatus: {
+        missingCount: missingCount
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: dashboardData,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Submit/Update Intake Progress
+ * @route   PATCH /api/participant/intake-step
+ * @access  Private (Participant)
+ */
+exports.submitIntakeStep = async (req, res) => {
+  try {
+    const { step, data } = req.body; // step (1-6), data (optional profile updates)
+
+    if (!step || step < 1 || step > 6) {
+      return res.status(400).json({ success: false, message: 'Invalid intake step (must be 1-6)' });
+    }
+
+    const percentage = Math.round((step / 6) * 100);
+    
+    // Prepare update object
+    const update = {
+      'intakeStatus.currentStep': step,
+      'intakeStatus.percentage': percentage,
+      'intakeStatus.status': step === 6 ? 'Pending Review' : 'Action Required'
+    };
+
+    // If data is provided (e.g., from a "Next Step" button that saves), merge it
+    if (data) {
+      if (data.interests) update.interests = data.interests;
+      if (data.housingStatus) update.housingStatus = data.housingStatus;
+      if (data.address) update.address = data.address;
+      if (data.unhousedDetails) update.unhousedDetails = data.unhousedDetails;
+      if (data.householdSize !== undefined) update.householdSize = data.householdSize;
+      if (data.dietaryRestrictions) update.dietaryRestrictions = data.dietaryRestrictions;
+      if (data.isVeteran !== undefined) update.isVeteran = data.isVeteran;
+      if (data.hasDisability !== undefined) update.hasDisability = data.hasDisability;
+      if (data.monthlyIncome !== undefined) update.monthlyIncome = data.monthlyIncome;
+      if (data.citizenStatus) update.citizenStatus = data.citizenStatus;
+      if (data.assistancePrograms) update.assistancePrograms = data.assistancePrograms;
+      if (data.consentToInformationUse !== undefined) update.consentToInformationUse = data.consentToInformationUse;
+    }
+
+    const profile = await ParticipantProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      { $set: update },
+      { new: true, upsert: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Intake step ${step} updated`,
+      data: profile.intakeStatus
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Upload Participant Document (ID/Proof)
+ * @route   POST /api/participant/upload-document
+ * @access  Private (Participant)
+ */
+exports.uploadDocument = async (req, res) => {
+  try {
+    const { documentType } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload a file' });
+    }
+
+    if (!['ID', 'Proof of Residence', 'Proof of Income'].includes(documentType)) {
+      return res.status(400).json({ success: false, message: 'Invalid document type' });
+    }
+
+    const fileUrl = req.file.path;
+
+    const profile = await ParticipantProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      { 
+        $push: { 
+          documents: { 
+            documentType, 
+            fileUrl, 
+            status: 'pending' 
+          } 
+        } 
+      },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `${documentType} uploaded successfully`,
+      data: profile.documents[profile.documents.length - 1]
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Send email verification code (OTP)
+ * @route   POST /api/participant/send-verification-code
+ * @access  Private (Participant)
+ */
+exports.sendVerificationCode = async (req, res) => {
+  try {
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store OTP in profile (selected: false by default in model)
+    await ParticipantProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      { emailVerificationCode: otp },
+      { upsert: true }
+    );
+
+    // Send actual email
+    try {
+      const sendEmail = require('../utils/sendEmail');
+      await sendEmail({
+        email: req.user.email,
+        subject: 'Email Verification Code',
+        message: `Your verification code is: ${otp}`,
+        html: `<p>Your verification code is: <strong>${otp}</strong></p>`,
+      });
+    } catch (err) {
+      console.error('Email could not be sent', err);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification code sent to your email'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Verify email OTP code
+ * @route   POST /api/participant/verify-code
+ * @access  Private (Participant)
+ */
+exports.verifyCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Please provide the verification code' });
+    }
+
+    const profile = await ParticipantProfile.findOne({ userId: req.user._id }).select('+emailVerificationCode');
+
+    if (!profile || profile.emailVerificationCode !== code) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+    }
+
+    // Mark as verified and clear code
+    profile.isEmailVerified = true;
+    profile.emailVerificationCode = undefined;
+    await profile.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Get List of Pantries / Opportunities with Search
+ * @route   GET /api/participant/pantries
+ * @access  Private (Participant)
+ */
+exports.getPantries = async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = { status: 'active' };
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const opportunities = await Opportunity.find(query).sort({ date: 1, time: 1 });
+
+    const formattedPantries = opportunities.map(opp => {
+      let operatingStatus = 'Upcoming';
+      
+      if (opp.date) {
+        const oppDate = new Date(opp.date);
+        oppDate.setHours(0, 0, 0, 0);
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (oppDate < today) {
+          operatingStatus = 'Closed';
+        } else if (oppDate.getTime() === today.getTime()) {
+           if (opp.endTime) {
+              operatingStatus = `Open until ${opp.endTime}`;
+           } else {
+              operatingStatus = 'Open Today';
+           }
+        } else {
+           // Simple short date
+           operatingStatus = `Upcoming on ${oppDate.getMonth() + 1}/${oppDate.getDate()}`;
+        }
+      } else {
+         if (opp.endTime) operatingStatus = `Open until ${opp.endTime}`;
+         else operatingStatus = 'Open';
+      }
+
+      return {
+        id: opp._id,
+        title: opp.title,
+        location: opp.location,
+        specificLocation: opp.specificLocation,
+        category: opp.category,
+        operatingStatus,
+        distance: "0.5 Min", // Mocked for UI
+        date: opp.date,
+        time: opp.time,
+        endTime: opp.endTime
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: formattedPantries.length,
+      data: formattedPantries
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

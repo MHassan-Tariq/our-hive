@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
@@ -13,6 +14,7 @@ const participantRoutes = require('./routes/participantRoutes');
 const hiveRoutes = require('./routes/hiveRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const userRoutes = require('./routes/userRoutes');
+const errorHandler = require('./middleware/error');
 
 const app = express();
 
@@ -20,6 +22,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── Swagger UI ───────────────────────────────────────────────────────────────
 app.use(
@@ -82,12 +85,6 @@ app.use((req, res) => {
 });
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-  });
-});
+app.use(errorHandler);
 
 module.exports = app;
