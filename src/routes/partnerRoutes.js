@@ -89,7 +89,7 @@ router.get('/dashboard', getDashboardData);
 
 /**
  * @swagger
- * /api/opportunities:
+ * /api/partners/opportunities:
  *   post:
  *     summary: Create a new volunteer opportunity or event (Partner only)
  *     tags: [Partners, Opportunities]
@@ -121,7 +121,7 @@ router.post('/opportunities', upload.single('flyer'), createOpportunity);
 
 /**
  * @swagger
- * /api/opportunities/partner:
+ * /api/partners/opportunities/partner:
  *   get:
  *     summary: Get all opportunities created by the logged-in partner
  *     description: Retrieve list of events and volunteer opportunities. Supports optional search and status filtering.
@@ -148,7 +148,7 @@ router.get('/opportunities/partner', getMyOpportunities);
 
 /**
  * @swagger
- * /api/opportunities/{id}:
+ * /api/partners/opportunities/{id}:
  *   patch:
  *     summary: Update an existing opportunity (Partner only)
  *     description: Allows partners to edit their submissions. Status will revert to 'pending' after edit.
