@@ -7,7 +7,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "build": "mkdir -p public && echo 'Our Hive API' > public/index.html",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed": "node src/seeder.js",
+    "seed:destroy": "node src/seeder.js -d"
   },
   "keywords": [],
   "author": "",
