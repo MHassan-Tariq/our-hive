@@ -47,7 +47,7 @@ const donate = asyncHandler(async (req, res, next) => {
     mealsProvided,
     paymentMethod: paymentMethod || 'Credit Card',
     isMonthly: !!isMonthly,
-    status: 'completed',
+    status: 'Completed',
   });
 
   // 2. Upsert sponsor profile and add to totalContributed

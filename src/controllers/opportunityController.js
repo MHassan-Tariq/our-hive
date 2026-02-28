@@ -10,7 +10,7 @@ const ActivityLog = require('../models/ActivityLog');
 const getUpcomingEvents = async (req, res) => {
   try {
     const { search, location, category } = req.query;
-    const query = { status: 'active' };
+    const query = { status: 'Active' };
 
     if (search) {
       query.$or = [
@@ -54,7 +54,7 @@ const joinEvent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    if (opportunity.status !== 'active') {
+    if (opportunity.status !== 'Active') {
       return res.status(400).json({
         success: false,
         message: `This event is no longer active (status: ${opportunity.status}).`,
@@ -170,7 +170,7 @@ const checkInToEvent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    if (opportunity.status !== 'active') {
+    if (opportunity.status !== 'Active') {
       return res.status(400).json({
         success: false,
         message: `This event is no longer active (status: ${opportunity.status}).`,

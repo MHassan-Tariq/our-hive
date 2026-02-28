@@ -19,7 +19,7 @@ const getAvailableOpportunities = async (req, res) => {
   try {
     const { search, location, category } = req.query;
 
-    const query = { status: 'active' };
+    const query = { status: 'Active' };
 
     // 1. Keyword search (title + description)
     if (search) {
@@ -84,7 +84,7 @@ const joinOpportunity = async (req, res) => {
         message: 'Opportunity not found.',
       });
     }
-    if (opportunity.status !== 'active') {
+    if (opportunity.status !== 'Active') {
       return res.status(400).json({
         success: false,
         message: `This opportunity is no longer active (status: ${opportunity.status}).`,
@@ -434,7 +434,7 @@ const getDashboardStats = async (req, res) => {
   try {
     const profile = await VolunteerProfile.findOne({ userId: req.user._id }).populate({
       path: 'joinedOpportunities',
-      match: { status: 'active' },
+      match: { status: 'Active' },
       select: 'title date time endTime location',
     });
 

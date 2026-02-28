@@ -822,7 +822,7 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
   const opportunityData = {
     ...req.body,
     partnerId: req.body.partnerId || req.user.id,
-    status: req.body.status || 'Pending'
+    status: req.body.status || 'Active'
   };
 
   // Safeguards for numeric fields from FormData

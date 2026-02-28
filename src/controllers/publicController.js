@@ -131,18 +131,34 @@ exports.getDistributionSchedule = async (req, res) => {
       endDate = endOfDay(now);
     }
 
-    // Query by createdAt
+    // Query by event date
     const query = {
-      status: 'Confirmed',
-      createdAt: { $gte: startDate, $lte: endDate }
+      status: { $in: ['Confirmed', 'Active'] },
+      date: { $gte: startDate, $lte: endDate }
     };
 
     const slots = await Opportunity.find(query)
       .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt')
       .populate('partnerId', 'orgName organizationLogoUrl')
-      .sort({ createdAt: 1 });
+      .sort({ date: 1, time: 1 });
 
-    // Optional enrichment (can keep for front-end)
+    // Helper to parse "10:00 AM" or "14:00" into numeric hours/minutes
+    const parseTime = (timeStr) => {
+      if (!timeStr) return null;
+      // Handle "HH:MM AM/PM" or "HH:MM"
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+      if (!match) return null;
+      
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const modifier = match[3] ? match[3].toUpperCase() : null;
+
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      
+      return { hours, minutes };
+    };
+
     const enrichedSlots = slots.map(slot => {
       const slotObj = slot.toObject();
       let isOpenNow = false;
@@ -150,18 +166,26 @@ exports.getDistributionSchedule = async (req, res) => {
 
       if (slotObj.date && slotObj.time && slotObj.endTime) {
         const slotDate = new Date(slotObj.date);
-        const [openHour, openMin] = slotObj.time.split(':').map(Number);
-        const [closeHour, closeMin] = slotObj.endTime.split(':').map(Number);
+        
+        const startTimeParsed = parseTime(slotObj.time);
+        const endTimeParsed = parseTime(slotObj.endTime);
 
-        const openTime = new Date(slotDate);
-        openTime.setHours(openHour, openMin, 0, 0);
+        if (startTimeParsed && endTimeParsed) {
+          const openTime = new Date(slotDate);
+          openTime.setHours(startTimeParsed.hours, startTimeParsed.minutes, 0, 0);
 
-        const closeTime = new Date(slotDate);
-        closeTime.setHours(closeHour, closeMin, 0, 0);
+          let closeTime = new Date(slotDate);
+          closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
 
-        if (now >= openTime && now <= closeTime) {
-          isOpenNow = true;
-          closesInMinutes = Math.round((closeTime - now) / 60000);
+          // Handle overnight wrap-around (if endTime is earlier than startTime)
+          if (closeTime <= openTime) {
+            closeTime.setDate(closeTime.getDate() + 1);
+          }
+
+          if (now >= openTime && now <= closeTime) {
+            isOpenNow = true;
+            closesInMinutes = Math.round((closeTime - now) / 60000);
+          }
         }
       }
 

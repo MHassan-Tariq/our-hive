@@ -214,7 +214,7 @@ const createOpportunity = async (req, res) => {
       physicalRequirements,
       dressCode,
       orientation,
-      status: 'pending', // Explicitly set to pending for review
+      status: 'Pending', // Explicitly set to Pending for review
     });
 
     res.status(201).json({
@@ -342,8 +342,8 @@ const updateOpportunity = async (req, res) => {
     opportunity.orientation = orientation || opportunity.orientation;
 
     // If significant fields are updated, set status back to pending for review
-    if (needsReapproval && opportunity.status !== 'pending') {
-      opportunity.status = 'pending';
+    if (needsReapproval && opportunity.status !== 'Pending') {
+      opportunity.status = 'Pending';
       opportunity.adminNotes = 'Opportunity updated by partner, pending re-approval.';
     }
 

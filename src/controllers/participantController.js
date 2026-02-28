@@ -140,7 +140,7 @@ exports.getMyFeed = async (req, res) => {
 
     // Find matching opportunities
     const opportunities = await Opportunity.find({
-      status: 'active',
+      status: 'Active',
       category: { $in: interests }
     }).sort({ createdAt: -1 });
 
@@ -196,7 +196,7 @@ exports.requestService = async (req, res) => {
       serviceId,
       serviceType,
       qrCodeData,
-      status: 'active'
+      status: 'Active'
     };
 
     const profile = await ParticipantProfile.findOneAndUpdate(
@@ -236,7 +236,7 @@ exports.getParticipantDashboard = async (req, res) => {
 
     // Get the next upcoming distribution (closest future active opportunity)
     const nextDistribution = await Opportunity.findOne({
-      status: 'active',
+      status: 'Active',
       date: { $gte: new Date() } // Future or today events
     }).sort({ date: 1, time: 1 }); // Closest first
 
@@ -457,7 +457,7 @@ exports.verifyCode = async (req, res) => {
 exports.getPantries = async (req, res) => {
   try {
     const { search } = req.query;
-    let query = { status: 'active' };
+    let query = { status: 'Active' };
 
     if (search) {
       query.$or = [
