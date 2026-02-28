@@ -846,6 +846,18 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
   }
   
   const updates = { ...req.body };
+  
+  // Remove fields that should not be updated directly or could cause validation issues
+  delete updates._id;
+  delete updates.__v;
+  delete updates.createdAt;
+  delete updates.updatedAt;
+  
+  // If partnerId is an object or invalid string, remove it to keep the original
+  if (typeof updates.partnerId === 'object' || updates.partnerId === '[object Object]') {
+    delete updates.partnerId;
+  }
+
   if (req.file) {
     updates.flyerUrl = req.file.path || req.file.secure_url || req.file.url;
   }
