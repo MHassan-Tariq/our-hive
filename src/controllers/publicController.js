@@ -101,54 +101,85 @@ exports.getDistributionSchedule = async (req, res) => {
   try {
     const { filter = 'today' } = req.query;
     const now = new Date();
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-
     let startDate, endDate;
+
+    // Helper to set time to start of day
+    const startOfDay = (date) => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    // Helper to set time to end of day
+    const endOfDay = (date) => {
+      const d = new Date(date);
+      d.setHours(23, 59, 59, 999);
+      return d;
+    };
+
     if (filter === 'tomorrow') {
-      startDate = new Date(startOfToday);
-      startDate.setDate(startDate.getDate() + 1);
-      endDate = new Date(startDate);
-      endDate.setHours(23, 59, 59, 999);
+      startDate = startOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+      endDate = endOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
     } else if (filter === 'this_week') {
-      startDate = new Date(startOfToday);
-      endDate = new Date(startOfToday);
-      endDate.setDate(endDate.getDate() + 7);
-      endDate.setHours(23, 59, 59, 999);
+      const day = now.getDay(); // 0 = Sunday, 1 = Monday ...
+      const diffToMonday = day === 0 ? -6 : 1 - day; // adjust so week starts Monday
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday));
+      endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)); // Sunday end
     } else {
-      startDate = new Date(startOfToday);
-      endDate = new Date(startOfToday);
-      endDate.setHours(23, 59, 59, 999);
+      // default: today
+      startDate = startOfDay(now);
+      endDate = endOfDay(now);
     }
 
-    const slots = await Opportunity.find({
+    // Query by createdAt
+    const query = {
       status: 'Confirmed',
-      date: { $gte: startDate, $lte: endDate }
-    })
-      .select('title location specificLocation coordinates date time endTime flyerUrl category partnerId')
-      .populate('partnerId', 'orgName organizationLogoUrl')
-      .sort({ date: 1 });
+      createdAt: { $gte: startDate, $lte: endDate }
+    };
 
+    const slots = await Opportunity.find(query)
+      .select('title location specificLocation coordinates date time endTime flyerUrl category partnerId createdAt')
+      .populate('partnerId', 'orgName organizationLogoUrl')
+      .sort({ createdAt: 1 });
+
+    // Optional enrichment (can keep for front-end)
     const enrichedSlots = slots.map(slot => {
       const slotObj = slot.toObject();
       let isOpenNow = false;
       let closesInMinutes = null;
+
       if (slotObj.date && slotObj.time && slotObj.endTime) {
-        const slotDate = new Date(slotObj.date).toDateString();
-        const openTime = new Date(`${slotDate} ${slotObj.time}`);
-        const closeTime = new Date(`${slotDate} ${slotObj.endTime}`);
+        const slotDate = new Date(slotObj.date);
+        const [openHour, openMin] = slotObj.time.split(':').map(Number);
+        const [closeHour, closeMin] = slotObj.endTime.split(':').map(Number);
+
+        const openTime = new Date(slotDate);
+        openTime.setHours(openHour, openMin, 0, 0);
+
+        const closeTime = new Date(slotDate);
+        closeTime.setHours(closeHour, closeMin, 0, 0);
+
         if (now >= openTime && now <= closeTime) {
           isOpenNow = true;
           closesInMinutes = Math.round((closeTime - now) / 60000);
         }
       }
+
       slotObj.isOpenNow = isOpenNow;
       slotObj.closesInMinutes = closesInMinutes;
+
       return slotObj;
     });
 
-    res.status(200).json({ success: true, filter, count: enrichedSlots.length, data: enrichedSlots });
+    res.status(200).json({
+      success: true,
+      filter,
+      count: enrichedSlots.length,
+      data: enrichedSlots
+    });
+
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
