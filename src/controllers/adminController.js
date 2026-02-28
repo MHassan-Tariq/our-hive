@@ -816,12 +816,26 @@ const adminGetOpportunity = asyncHandler(async (req, res, next) => {
 });
 
 const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
+  console.log('DEBUG: adminCreateOpportunity body:', JSON.stringify(req.body));
+  console.log('DEBUG: adminCreateOpportunity file:', req.file);
   // Logic for admin creating an event
   const opportunityData = {
     ...req.body,
     partnerId: req.body.partnerId || req.user.id,
     status: req.body.status || 'Pending'
   };
+
+  // Safeguards for numeric fields from FormData
+  if (opportunityData.requiredVolunteers === '' || opportunityData.requiredVolunteers === null) {
+      delete opportunityData.requiredVolunteers;
+  } else if (typeof opportunityData.requiredVolunteers === 'string') {
+      opportunityData.requiredVolunteers = parseInt(opportunityData.requiredVolunteers, 10);
+  }
+
+  // Ensure partnerId is a valid ObjectId string
+  if (typeof opportunityData.partnerId === 'object') {
+      opportunityData.partnerId = opportunityData.partnerId._id || req.user.id;
+  }
 
   if (req.file) {
     opportunityData.flyerUrl = req.file.path || req.file.secure_url || req.file.url;
@@ -841,21 +855,41 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
+  console.log('DEBUG: adminUpdateOpportunity body:', JSON.stringify(req.body));
+  console.log('DEBUG: adminUpdateOpportunity file:', req.file);
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return next(new ErrorResponse('Opportunity not found', 404));
   }
   
   const updates = { ...req.body };
   
-  // Remove fields that should not be updated directly or could cause validation issues
+  // Remove fields that should not be updated directly
   delete updates._id;
   delete updates.__v;
   delete updates.createdAt;
   delete updates.updatedAt;
   
-  // If partnerId is an object or invalid string, remove it to keep the original
-  if (typeof updates.partnerId === 'object' || updates.partnerId === '[object Object]') {
+  // Safeguards for numeric fields from FormData
+  if (updates.requiredVolunteers === '' || updates.requiredVolunteers === null) {
+    delete updates.requiredVolunteers;
+  } else if (typeof updates.requiredVolunteers === 'string') {
+    updates.requiredVolunteers = parseInt(updates.requiredVolunteers, 10);
+  }
+
+  // Handle partnerId if it's an object or invalid string
+  if (typeof updates.partnerId === 'object') {
+    updates.partnerId = updates.partnerId._id;
+  } else if (updates.partnerId === '[object Object]') {
     delete updates.partnerId;
+  }
+
+  // Handle coordinates if they come as strings
+  if (updates.coordinates && typeof updates.coordinates === 'string') {
+    try {
+      updates.coordinates = JSON.parse(updates.coordinates);
+    } catch (e) {
+      delete updates.coordinates;
+    }
   }
 
   if (req.file) {

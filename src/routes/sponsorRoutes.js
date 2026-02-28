@@ -7,7 +7,6 @@ const {
   initiateDonation,
   getSponsorDashboard,
   getImpact,
-  getMissionStats,
   getCampaigns,
   updateSponsorProfile,
 } = require('../controllers/sponsorController');
@@ -64,19 +63,6 @@ router.post('/donations/initiate', initiateDonation);
  *         description: List of campaigns retrieved.
  */
 router.get('/campaigns', getCampaigns);
-
-/**
- * @swagger
- * /api/sponsor/mission-stats:
- *   get:
- *     summary: Get aggregate mission impact stats
- *     description: Returns data for the "Support Our Mission" screen.
- *     tags: [Sponsors]
- *     responses:
- *       200:
- *         description: Mission stats retrieved.
- */
-router.get('/mission-stats', getMissionStats);
 
 /**
  * @swagger

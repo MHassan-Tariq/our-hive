@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getStats, getHives, getOpportunities, getOpportunityDetails, getDistributionSchedule, getCampaigns, getAboutUs, getContactInfo, getUserRoles } = require('../controllers/publicController');
+const { getStats, getHives, getOpportunities, getOpportunityDetails, getDistributionSchedule, getCampaigns, getAboutUs, getContactInfo, getUserRoles, getMissionStats } = require('../controllers/publicController');
 
 /**
  * @swagger
@@ -262,6 +262,11 @@ router.get('/campaigns', getCampaigns);
  *                       category: { type: string }
  *                       isOpenNow: { type: boolean, description: "Whether this slot is currently open" }
  *                       closesInMinutes: { type: integer, description: "Minutes until closing (null if not open)" }
+ *                       coordinates:
+ *                         type: object
+ *                         properties:
+ *                           lat: { type: number, example: 39.7817 }
+ *                           lng: { type: number, example: -89.6501 }
  *                       partnerId:
  *                         type: object
  *                         properties:
@@ -300,5 +305,18 @@ router.get('/schedule', getDistributionSchedule);
  *                       icon: { type: string, description: "Icon key for the mobile UI to resolve" }
  */
 router.get('/user-roles', getUserRoles);
+
+/**
+ * @swagger
+ * /api/public/mission-stats:
+ *   get:
+ *     summary: Get aggregate mission impact stats
+ *     description: Returns data for the "Support Our Mission" screen.
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Mission stats retrieved.
+ */
+router.get('/mission-stats', getMissionStats);
 
 module.exports = router;

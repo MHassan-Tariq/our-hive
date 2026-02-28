@@ -68,7 +68,7 @@ exports.getOpportunities = async (req, res) => {
     const { search, category } = req.query;
 
     // Build query object
-    const query = { status: 'active' };
+    const query = { status: 'Confirmed' };
 
     if (category) {
       query.category = category;
@@ -122,10 +122,10 @@ exports.getDistributionSchedule = async (req, res) => {
     }
 
     const slots = await Opportunity.find({
-      status: 'active',
+      status: 'Confirmed',
       date: { $gte: startDate, $lte: endDate }
     })
-      .select('title location specificLocation date time endTime flyerUrl category partnerId')
+      .select('title location specificLocation coordinates date time endTime flyerUrl category partnerId')
       .populate('partnerId', 'orgName organizationLogoUrl')
       .sort({ date: 1 });
 
@@ -323,4 +323,21 @@ exports.getUserRoles = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error retrieving roles' });
   }
+};
+
+/**
+ * @desc    Get aggregate mission impact stats (legacy/mission-specific)
+ * @route   GET /api/public/mission-stats
+ * @access  Public
+ */
+exports.getMissionStats = async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      mealsServed: "1.2k+",
+      familiesHelped: 450,
+      activeHubs: 15,
+      missionStatement: "Your contribution helps us provide meals, resources, and support to our community. Every \"honeycomb\" in our hive makes us stronger."
+    }
+  });
 };

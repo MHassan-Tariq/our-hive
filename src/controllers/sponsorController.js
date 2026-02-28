@@ -144,25 +144,6 @@ const initiateDonation = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * @desc    Get aggregate mission impact stats for the "Support Our Mission" screen
- * @route   GET /api/sponsor/mission-stats
- * @access  Public (or Private)
- */
-const getMissionStats = asyncHandler(async (req, res, next) => {
-  // In a real app, these would be aggregated from the database
-  // For now, returning data that matches the UI image
-  res.status(200).json({
-    success: true,
-    data: {
-      mealsServed: "1.2k+",
-      familiesHelped: 450,
-      activeHubs: 15,
-      missionStatement: "Your contribution helps us provide meals, resources, and support to our community. Every \"honeycomb\" in our hive makes us stronger."
-    }
-  });
-});
-
-/**
  * @desc    Get sponsor dashboard data (stats + donations)
  * @route   GET /api/sponsor/dashboard
  * @access  Private (sponsor)
@@ -319,7 +300,6 @@ module.exports = {
   initiateDonation,
   getSponsorDashboard,
   getImpact,
-  getMissionStats,
   getCampaigns,
   updateSponsorProfile,
 };
