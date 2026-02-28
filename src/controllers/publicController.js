@@ -127,7 +127,8 @@ exports.getDistributionSchedule = async (req, res) => {
       endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)); // Sunday end
     } else {
       // default: today
-      startDate = startOfDay(now);
+      // Include yesterday as well to catch overnight events starting yesterday and ending today
+      startDate = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
       endDate = endOfDay(now);
     }
 
@@ -178,22 +179,36 @@ exports.getDistributionSchedule = async (req, res) => {
           closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
 
           // Handle overnight wrap-around (if endTime is earlier than startTime)
-          if (closeTime <= openTime) {
+          if (closeTime < openTime) {
             closeTime.setDate(closeTime.getDate() + 1);
           }
 
           if (now >= openTime && now <= closeTime) {
             isOpenNow = true;
-            closesInMinutes = Math.round((closeTime - now) / 60000);
+            closesInMinutes = Math.floor((closeTime - now) / (1000 * 60));
+          }
+
+          // Filter for "today" view:
+          // If the event is from "yesterday", we only show it if it's currently open or cross-midnight
+          if (filter === 'today' || !req.query.filter) {
+            const todayStart = startOfDay(now);
+            const slotDateStart = startOfDay(slotDate);
+            
+            // If it's yesterday's event
+            if (slotDateStart < todayStart) {
+              // Only keep if it crosses into today (overnight) AND hasn't ended before today started
+              if (closeTime < todayStart) {
+                return null; // Skip this yesterday item
+              }
+            }
           }
         }
       }
 
       slotObj.isOpenNow = isOpenNow;
       slotObj.closesInMinutes = closesInMinutes;
-
       return slotObj;
-    });
+    }).filter(slot => slot !== null);
 
     res.status(200).json({
       success: true,
