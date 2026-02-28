@@ -471,6 +471,57 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Upload volunteer documents (ID and License)
+ * @route   POST /api/volunteer/upload-docs/:userId
+ * @access  Private (volunteer)
+ */
+const uploadVolunteerDocs = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Security check: ensure the logged-in user is only uploading for themselves
+    if (req.user._id.toString() !== userId.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to upload documents for this user.',
+      });
+    }
+
+    let profile = await VolunteerProfile.findOne({ userId });
+
+    if (!profile) {
+      profile = new VolunteerProfile({ userId });
+    }
+
+    if (req.files) {
+      if (req.files.governmentId) {
+        profile.governmentIdUrl = req.files.governmentId[0].path;
+      }
+      if (req.files.drivingLicense) {
+        profile.drivingLicenseUrl = req.files.drivingLicense[0].path;
+      }
+      await profile.save();
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'No files uploaded.',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        governmentIdUrl: profile.governmentIdUrl,
+        drivingLicenseUrl: profile.drivingLicenseUrl,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 module.exports = {
   saveProfile,
   getProfile,
@@ -481,4 +532,5 @@ module.exports = {
   getDashboardStats,
   getAvailableOpportunities,
   joinOpportunity,
+  uploadVolunteerDocs,
 };

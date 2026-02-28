@@ -25,7 +25,7 @@ const sendTokenResponse = (user, statusCode, res) => {
 };
 
 const register = asyncHandler(async (req, res, next) => {
-  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress } = req.body;
+  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability } = req.body;
 
   // Handle single "fullName" field from UI if firstName/lastName missing
   if (fullName && (!firstName || !lastName)) {
@@ -61,7 +61,18 @@ const register = asyncHandler(async (req, res, next) => {
   // Create empty profile based on role
   switch (user.role) {
     case 'volunteer':
-      await VolunteerProfile.create({ userId: user._id });
+      await VolunteerProfile.create({ 
+        userId: user._id,
+        fullName: fullName || `${firstName} ${lastName}`,
+        phone: phone || user.phone,
+        skills: skills || [],
+        availability: availability || {
+          morning: false,
+          afternoon: false,
+          evenings: false,
+          weekend: false
+        }
+      });
       break;
     case 'sponsor':
       await Sponsor.create({ userId: user._id });

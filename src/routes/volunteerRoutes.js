@@ -175,47 +175,45 @@ router.route('/profile')
 
 /**
  * @swagger
- * /api/volunteer/my-tasks:
- *   get:
- *     summary: Get all opportunities the volunteer has joined
- *     description: >
- *       Returns a list of every opportunity this volunteer has claimed a spot for,
- *       with partner details populated. Status of each opportunity is included
- *       so the frontend can badge completed vs. active tasks.
+ * /api/volunteer/upload-docs/{userId}:
+ *   post:
+ *     summary: Upload volunteer documents using userId
+ *     description: Upload Government ID and Driving License for a specific user ID.
  *     tags: [Volunteers]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               governmentId:
+ *                 type: string
+ *                 format: binary
+ *               drivingLicense:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       200:
- *         description: List of joined opportunities.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 count:
- *                   type: integer
- *                   example: 2
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Opportunity'
- *       401:
- *         description: Unauthorized.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden — user is not a volunteer.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Documents uploaded successfully.
  */
+router.post(
+  '/upload-docs/:userId',
+  upload.fields([
+    { name: 'governmentId', maxCount: 1 },
+    { name: 'drivingLicense', maxCount: 1 },
+  ]),
+  require('../controllers/volunteerController').uploadVolunteerDocs
+);
+
 router.get('/my-tasks', getMyTasks);
 
 module.exports = router;
