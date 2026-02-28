@@ -19,6 +19,8 @@ const {
   adminUpdateInKindDonationStatus,
   adminExportInKindDonationsCSV,
   adminGetInKindDonation,
+  adminListVolunteers,
+  adminGetVolunteer,
   adminUpdateVolunteerProfile,
   adminUpdateSponsorProfile,
   adminListPartners,
@@ -849,34 +851,8 @@ router.get('/in-kind-donations/:id', adminGetInKindDonation);
  */
 router.patch('/in-kind-donations/:id/status', adminUpdateInKindDonationStatus);
 
-/**
- * @swagger
- * /api/admin/volunteers/{id}:
- *   patch:
- *     summary: Update volunteer profile (Admin)
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               fullName: { type: string }
- *               phone: { type: string }
- *               backgroundCheckStatus: { type: string, enum: [Not Started, Pending, Verified, Action Required] }
- *     responses:
- *       200:
- *         description: Profile updated.
- *       404:
- *         description: Profile not found.
- */
+router.get('/volunteers', adminListVolunteers);
+router.get('/volunteers/:id', adminGetVolunteer);
 router.patch('/volunteers/:id', adminUpdateVolunteerProfile);
 
 /**

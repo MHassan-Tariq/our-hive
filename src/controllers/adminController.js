@@ -648,6 +648,71 @@ const adminGetInKindDonation = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    List all volunteers with pagination, search, and screening status (Admin)
+ * @route   GET /api/admin/volunteers
+ * @access  Private (Admin only)
+ */
+const adminListVolunteers = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, status } = req.query;
+
+  // 1. Build User Query
+  const userQuery = { role: 'volunteer' };
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    userQuery.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
+  }
+  const matchingUsers = await User.find(userQuery).select('_id');
+  const userIds = matchingUsers.map(u => u._id);
+
+  // 2. Build Profile Query
+  const profileQuery = { userId: { $in: userIds } };
+  if (status) profileQuery.backgroundCheckStatus = status;
+
+  // 3. Fetch Data
+  const total = await VolunteerProfile.countDocuments(profileQuery);
+  const profiles = await VolunteerProfile.find(profileQuery)
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: profiles.length,
+    pagination: {
+      totalPages: Math.ceil(total / limit),
+      totalResults: total
+    },
+    data: profiles,
+  });
+});
+
+/**
+ * @desc    Get single volunteer detail (Admin)
+ * @route   GET /api/admin/volunteers/:id
+ * @access  Private (Admin only)
+ */
+const adminGetVolunteer = asyncHandler(async (req, res, next) => {
+  const profile = await VolunteerProfile.findById(req.params.id)
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt isApproved');
+
+  if (!profile) {
+    return next(new ErrorResponse('Volunteer profile not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: profile
+  });
+});
+
+/**
  * @desc    Update volunteer profile (Admin)
  * @route   PATCH /api/admin/volunteers/:id
  * @access  Private (Admin only)
@@ -1231,6 +1296,8 @@ module.exports = {
   adminExportInKindDonationsCSV,
   adminGetInKindDonation,
   adminUpdateVolunteerProfile,
+  adminListVolunteers,
+  adminGetVolunteer,
   adminUpdateSponsorProfile,
   adminListPartners,
   adminListOpportunities,
@@ -1240,7 +1307,6 @@ module.exports = {
   adminUpdateOpportunity,
   adminDeleteOpportunity,
   adminListSponsors,
-  adminGetSponsor,
   adminGetSponsor,
   adminDeactivateSponsor,
   adminDeleteSponsor,
