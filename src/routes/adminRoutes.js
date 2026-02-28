@@ -31,6 +31,7 @@ const {
   adminListSponsors,
   adminGetSponsor,
   adminDeactivateSponsor,
+  adminDeleteSponsor,
   adminGetSettings,
   adminUpdateSettings,
   adminGetProfile,
@@ -910,6 +911,7 @@ router.get('/sponsors', adminListSponsors);
 router.get('/sponsors/:id', adminGetSponsor);
 router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
 router.patch('/sponsors/:id', adminUpdateSponsorProfile);
+router.delete('/sponsors/:id', adminDeleteSponsor);
 
 /**
  * @swagger

@@ -674,25 +674,63 @@ const adminUpdateVolunteerProfile = asyncHandler(async (req, res, next) => {
  * :id — the Sponsor document _id
  */
 const adminUpdateSponsorProfile = asyncHandler(async (req, res, next) => {
-  let profile = await Sponsor.findOneAndUpdate(
-    { userId: req.params.id },
+  const { id } = req.params;
+  
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid Sponsor ID', 400));
+  }
+
+  // Find by Sponsor _id
+  let sponsor = await Sponsor.findById(id);
+
+  if (!sponsor) {
+    return next(new ErrorResponse('Sponsor not found', 404));
+  }
+
+  // Update Sponsor document
+  sponsor = await Sponsor.findByIdAndUpdate(
+    id,
     { $set: req.body },
     { new: true, runValidators: true }
   );
 
   // If patching isApproved, we must update the root User document directly
-  if (req.body.isApproved !== undefined) {
-    await User.findByIdAndUpdate(req.params.id, { isApproved: req.body.isApproved });
+  if (req.body.status !== undefined) {
+    await User.findByIdAndUpdate(sponsor.userId, { 
+      isApproved: req.body.status === 'Active' 
+    });
   }
 
-  // If no specific Sponsor profile yet exists, fallback to verifying the root user exists.
-  if (!profile) {
-    const rootUser = await User.findById(req.params.id);
-    if (!rootUser) return next(new ErrorResponse('Sponsor profile not found', 404));
-    profile = rootUser;
+  res.status(200).json({ success: true, data: sponsor });
+});
+
+/**
+ * @desc    Delete a sponsor (Admin)
+ * @route   DELETE /api/admin/sponsors/:id
+ * @access  Private (Admin only)
+ */
+const adminDeleteSponsor = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid Sponsor ID', 400));
   }
 
-  res.status(200).json({ success: true, data: profile });
+  const sponsor = await Sponsor.findByIdAndDelete(id);
+
+  if (!sponsor) {
+    return next(new ErrorResponse('Sponsor not found', 404));
+  }
+
+  // Optionally delete/deactivate the User account too? 
+  // For now, just removing the Sponsor profile as requested.
+  // If we wanted to remove the user:
+  // await User.findByIdAndDelete(sponsor.userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Sponsor deleted successfully'
+  });
 });
 
 /**
@@ -1203,7 +1241,9 @@ module.exports = {
   adminDeleteOpportunity,
   adminListSponsors,
   adminGetSponsor,
+  adminGetSponsor,
   adminDeactivateSponsor,
+  adminDeleteSponsor,
   adminGetSettings,
   adminUpdateSettings,
   adminGetProfile,
