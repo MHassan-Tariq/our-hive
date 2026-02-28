@@ -109,3 +109,19 @@ To match the logistics UI, `InKindDonation` was updated:
   - **Approve/Reject:** Changes the status. If rejected, accepts a `rejectionReason`.
   - **Destination Assignment:** Accepts `locationName` (e.g., "Main Shelter") and granular slots (`storageRoom`, `storageRack`, `storageShelf`, `storageFloor`).
   - **Activity Logging:** Automatically generates an `ActivityLog` entry so the participant is notified that their donation status has advanced.
+
+---
+
+## 4. Opportunity & Event Management (Create & Edit)
+
+**Endpoints:**
+
+- `POST /api/admin/events` (Create)
+- `PATCH /api/admin/events/:id` (Update)
+
+**Workflow:**
+
+- Admins can create new volunteer opportunities or edit existing ones.
+- **Fields:** `title`, `description`, `location`, `date`, `time`, `endTime`, `category`, `requiredVolunteers`, `status`, etc.
+- **Time Formatting:** The frontend handles conversion between 24h picker format and 12h AM/PM backend format.
+- **File Upload:** Supports uploading an event flyer via `multipart/form-data`.

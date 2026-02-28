@@ -136,6 +136,36 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *       200:
  *         description: Password reset successful. Returns new JWT token.
  */
+/**
+ * @swagger
+ * /api/admin/events:
+ *   post:
+ *     summary: Create a new event/opportunity (Admin)
+ *     tags: [Admin Events]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, description, date]
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               location: { type: string }
+ *               date: { type: string, format: date }
+ *               time: { type: string }
+ *               endTime: { type: string }
+ *               category: { type: string }
+ *               requiredVolunteers: { type: integer }
+ *               imageurl: { type: string }
+ *               status: { type: string, enum: [Draft, Confirmed, Pending] }
+ *     responses:
+ *       201:
+ *         description: Event created
+ */
 ```
 
 ---
@@ -198,6 +228,27 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *         schema: { type: string }
  *     responses:
  *       200: { description: List of active opportunities successfully retrieved }
+ */
+
+/**
+ * @swagger
+ * /api/public/opportunities/{id}:
+ *   get:
+ *     summary: Get specific event details
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Event details retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     time: { type: string }
+ *                     endTime: { type: string }
  */
 
 /**
