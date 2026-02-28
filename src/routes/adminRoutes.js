@@ -27,6 +27,7 @@ const {
   adminGetOpportunity,
   adminCreateOpportunity,
   adminUpdateOpportunity,
+  adminDeleteOpportunity,
   adminListSponsors,
   adminGetSponsor,
   adminDeactivateSponsor,
@@ -349,6 +350,7 @@ router.patch('/partners/:id/status', updatePartnerStatus);
 router.get('/events', adminListOpportunities);
 router.post('/events', upload.single('flyer'), adminCreateOpportunity);
 router.patch('/events/:id', upload.single('flyer'), adminUpdateOpportunity);
+router.delete('/events/:id', adminDeleteOpportunity);
 router.get('/events/:id', adminGetOpportunity);
 
 /**

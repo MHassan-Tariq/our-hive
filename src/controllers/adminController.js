@@ -913,6 +913,28 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Delete an opportunity (event)
+ * @route   DELETE /api/admin/events/:id
+ * @access  Private (Admin only)
+ */
+const adminDeleteOpportunity = asyncHandler(async (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+
+  const opportunity = await Opportunity.findByIdAndDelete(req.params.id);
+
+  if (!opportunity) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Opportunity deleted successfully'
+  });
+});
+
+/**
  * @desc    Get system settings
  * @route   GET /api/admin/settings
  * @access  Private (Admin only)
@@ -1160,6 +1182,7 @@ module.exports = {
   adminGetOpportunity,
   adminCreateOpportunity,
   adminUpdateOpportunity,
+  adminDeleteOpportunity,
   adminListSponsors,
   adminGetSponsor,
   adminDeactivateSponsor,
