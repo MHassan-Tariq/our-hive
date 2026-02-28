@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const PartnerProfile = require('../models/PartnerProfile');
 const VolunteerProfile = require('../models/VolunteerProfile');
@@ -5,6 +6,8 @@ const Sponsor = require('../models/Sponsor');
 const ActivityLog = require('../models/ActivityLog');
 const Opportunity = require('../models/Opportunity');
 const Campaign = require('../models/Campaign');
+const MonetaryDonation = require('../models/MonetaryDonation');
+const SystemSettings = require('../models/SystemSettings');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
@@ -24,14 +27,39 @@ const ROLES = [
  * @access  Private (Admin only)
  */
 const getAllUsers = asyncHandler(async (req, res, next) => {
-  const users = await User.find().sort({ createdAt: -1 });
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, role } = req.query;
+
+  const query = {};
+  if (role) {
+    query.role = role;
+  }
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    query.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
+  }
+
+  const total = await User.countDocuments(query);
+  const users = await User.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
   res.status(200).json({
     success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
     count: users.length,
+    pagination: {
+      totalPages: Math.ceil(total / limit),
+      totalResults: total
+    },
     data: users,
   });
 });
-
 /**
  * @desc    Get admin dashboard — stats, activity feed, campaign goal, search
  * @route   GET /api/admin/dashboard
@@ -131,9 +159,10 @@ const getDashboard = asyncHandler(async (req, res, next) => {
  */
 const updatePartnerStatus = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
+  const validStatuses = ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'];
 
-  if (!['approved', 'rejected'].includes(status)) {
-    return next(new ErrorResponse("Status must be either 'approved' or 'rejected'", 400));
+  if (!validStatuses.includes(status)) {
+    return next(new ErrorResponse(`Status must be one of: ${validStatuses.join(', ')}`, 400));
   }
 
   const profile = await PartnerProfile.findByIdAndUpdate(
@@ -147,8 +176,9 @@ const updatePartnerStatus = asyncHandler(async (req, res, next) => {
   }
 
   // Keep User.isApproved in sync for the dashboard query
+  // approved/Active means approved
   await User.findByIdAndUpdate(profile.userId, {
-    isApproved: status === 'approved',
+    isApproved: status === 'Active',
   });
 
   // Activity Log
@@ -176,9 +206,10 @@ const updatePartnerStatus = asyncHandler(async (req, res, next) => {
  */
 const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
+  const validStatuses = ['Draft', 'Confirmed', 'Pending', 'Completed', 'Cancelled', 'Rejected'];
 
-  if (!['active', 'rejected'].includes(status)) {
-    return next(new ErrorResponse("Status must be either 'active' or 'rejected'", 400));
+  if (!validStatuses.includes(status)) {
+    return next(new ErrorResponse(`Status must be one of: ${validStatuses.join(', ')}`, 400));
   }
 
   const opportunity = await Opportunity.findByIdAndUpdate(
@@ -194,10 +225,10 @@ const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
   // Activity Log
   await ActivityLog.create({
     userId: opportunity.partnerId,
-    type: status === 'active' ? 'Submission Approved' : 'Profile Updated',
-    content: status === 'active' 
+    type: status === 'Confirmed' ? 'Submission Approved' : 'Profile Updated',
+    content: status === 'Confirmed' 
       ? `Your event "${opportunity.title}" has been approved.` 
-      : `Your event "${opportunity.title}" was rejected.`,
+      : `Your event "${opportunity.title}" status changed to ${status}.`,
     relatedId: opportunity._id,
     relatedModel: 'Opportunity',
   });
@@ -470,9 +501,30 @@ const adminListInKindDonations = asyncHandler(async (req, res, next) => {
     pickupDate: { $gte: startOfDay, $lte: endOfDay }
   });
 
-  // Fetch Paginated List
-  const total = await InKindDonation.countDocuments();
-  const donations = await InKindDonation.find()
+// Fetch Paginated List
+  const { search } = req.query;
+  const listQuery = {};
+  
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    
+    // Find users matching search to extract their IDs
+    const matchingUsers = await User.find({
+      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }]
+    }).select('_id');
+    
+    const userIds = matchingUsers.map(u => u._id);
+    
+    // Search either in specific document fields or related donor IDs
+    listQuery.$or = [
+      { itemName: regex },
+      { donorName: regex },
+      { donorId: { $in: userIds } }
+    ];
+  }
+
+  const total = await InKindDonation.countDocuments(listQuery);
+  const donations = await InKindDonation.find(listQuery)
     .populate('donorId', 'firstName lastName')
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -622,17 +674,415 @@ const adminUpdateVolunteerProfile = asyncHandler(async (req, res, next) => {
  * :id — the Sponsor document _id
  */
 const adminUpdateSponsorProfile = asyncHandler(async (req, res, next) => {
-  const profile = await Sponsor.findByIdAndUpdate(
-    req.params.id,
+  let profile = await Sponsor.findOneAndUpdate(
+    { userId: req.params.id },
     { $set: req.body },
     { new: true, runValidators: true }
   );
 
+  // If patching isApproved, we must update the root User document directly
+  if (req.body.isApproved !== undefined) {
+    await User.findByIdAndUpdate(req.params.id, { isApproved: req.body.isApproved });
+  }
+
+  // If no specific Sponsor profile yet exists, fallback to verifying the root user exists.
   if (!profile) {
-    return next(new ErrorResponse('Sponsor profile not found', 404));
+    const rootUser = await User.findById(req.params.id);
+    if (!rootUser) return next(new ErrorResponse('Sponsor profile not found', 404));
+    profile = rootUser;
   }
 
   res.status(200).json({ success: true, data: profile });
+});
+
+/**
+ * @desc    List all partners with pagination and search
+ * @route   GET /api/admin/community-partners
+ * @access  Private (Admin only)
+ */
+const adminListPartners = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, status } = req.query;
+
+  const query = {};
+  if (status) query.status = status;
+  
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    
+    // Find users matching search to extract their IDs
+    const matchingUsers = await User.find({
+      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }]
+    }).select('_id');
+    
+    const userIds = matchingUsers.map(u => u._id);
+    
+    query.$or = [
+      { orgName: regex },
+      { userId: { $in: userIds } },
+      { partnerId: regex }
+    ];
+  }
+
+  const total = await PartnerProfile.countDocuments(query);
+  const partners = await PartnerProfile.find(query)
+    .populate('userId', 'firstName lastName email profilePictureUrl phone')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: partners.length,
+    data: partners
+  });
+});
+
+/**
+ * @desc    List all opportunities (events) with pagination and search
+ * @route   GET /api/admin/opportunities
+ * @access  Private (Admin only)
+ */
+const adminListOpportunities = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, status } = req.query;
+
+  const query = {};
+  if (status) query.status = status;
+
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    query.$or = [
+      { title: regex },
+      { location: regex },
+      { category: regex }
+    ];
+  }
+
+  const total = await Opportunity.countDocuments(query);
+  const opportunities = await Opportunity.find(query)
+    .populate('partnerId', 'firstName lastName email profilePictureUrl')
+    .sort({ date: 1, createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: opportunities.length,
+    data: opportunities
+  });
+});
+
+/**
+ * @desc    Get a single partner detail
+ * @route   GET /api/admin/community-partners/:id
+ * @access  Private (Admin only)
+ */
+const adminGetPartner = asyncHandler(async (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Partner profile not found', 404));
+  }
+  const partner = await PartnerProfile.findById(req.params.id).populate('userId', 'firstName lastName email profilePictureUrl phone');
+  if (!partner) {
+    return next(new ErrorResponse('Partner profile not found', 404));
+  }
+  res.status(200).json({ success: true, data: partner });
+});
+
+/**
+ * @desc    Get a single opportunity (event) detail
+ * @route   GET /api/admin/events/:id
+ * @access  Private (Admin only)
+ */
+const adminGetOpportunity = asyncHandler(async (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+  const opportunity = await Opportunity.findById(req.params.id).populate('partnerId', 'firstName lastName email');
+  if (!opportunity) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+  res.status(200).json({ success: true, data: opportunity });
+});
+
+/**
+ * @desc    Create a new opportunity (event)
+ * @route   POST /api/admin/events
+ * @access  Private (Admin only)
+ */
+const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
+  // Logic for admin creating an event
+  // If partnerId is provided in body, use it, otherwise it might be own event
+  const opportunityData = {
+    ...req.body,
+    status: req.body.status || 'Pending'
+  };
+
+  const opportunity = await Opportunity.create(opportunityData);
+
+  res.status(201).json({
+    success: true,
+    data: opportunity
+  });
+});
+
+/**
+ * @desc    Update an opportunity (event)
+ * @route   PATCH /api/admin/events/:id
+ * @access  Private (Admin only)
+ */
+const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+  
+  const opportunity = await Opportunity.findByIdAndUpdate(
+    req.params.id,
+    req.body,
+    { new: true, runValidators: true }
+  );
+
+  if (!opportunity) {
+    return next(new ErrorResponse('Opportunity not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: opportunity
+  });
+});
+
+/**
+ * @desc    Get system settings
+ * @route   GET /api/admin/settings
+ * @access  Private (Admin only)
+ */
+const adminGetSettings = asyncHandler(async (req, res, next) => {
+  let settings = await SystemSettings.findOne();
+  if (!settings) {
+    settings = await SystemSettings.create({});
+  }
+  res.status(200).json({ success: true, data: settings });
+});
+
+/**
+ * @desc    Update system settings
+ * @route   PATCH /api/admin/settings
+ * @access  Private (Admin only)
+ */
+const adminUpdateSettings = asyncHandler(async (req, res, next) => {
+  let settings = await SystemSettings.findOne();
+  if (!settings) {
+    settings = await SystemSettings.create(req.body);
+  } else {
+    settings = await SystemSettings.findByIdAndUpdate(settings._id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+  }
+  res.status(200).json({ success: true, data: settings });
+});
+
+/**
+ * @desc    Upload volunteer agreement
+ * @route   POST /api/admin/settings/agreement
+ * @access  Private (Admin only)
+ */
+const adminUploadAgreement = asyncHandler(async (req, res, next) => {
+  if (!req.file) {
+    return next(new ErrorResponse('Please upload a file', 400));
+  }
+
+  let settings = await SystemSettings.findOne();
+  if (!settings) {
+    settings = await SystemSettings.create({
+      agreementUrl: req.file.path,
+    });
+  } else {
+    settings.agreementUrl = req.file.path;
+    await settings.save();
+  }
+
+  res.status(200).json({
+    success: true,
+    data: settings,
+  });
+});
+
+/**
+ * @desc    Get admin profile
+ * @route   GET /api/admin/profile
+ * @access  Private (Admin only)
+ */
+const adminGetProfile = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  res.status(200).json({ success: true, data: user });
+});
+
+/**
+ * @desc    Update admin profile info
+ * @route   PATCH /api/admin/profile
+ * @access  Private (Admin only)
+ */
+const adminUpdateProfile = asyncHandler(async (req, res, next) => {
+  const { firstName, lastName, phone } = req.body;
+  const user = await User.findByIdAndUpdate(
+    req.user.id,
+    { firstName, lastName, phone },
+    { new: true, runValidators: true }
+  );
+  res.status(200).json({ success: true, data: user });
+});
+
+/**
+ * @desc    Update admin password
+ * @route   PATCH /api/admin/profile/password
+ * @access  Private (Admin only)
+ */
+const adminUpdatePassword = asyncHandler(async (req, res, next) => {
+  const { currentPassword, newPassword } = req.body;
+  const user = await User.findById(req.user.id).select('+password');
+
+  if (!(await user.matchPassword(currentPassword))) {
+    return next(new ErrorResponse('Current password incorrect', 401));
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  res.status(200).json({ success: true, message: 'Password updated successfully' });
+});
+
+/**
+ * @desc    List all sponsors with pagination, search and stats (Admin)
+ * @route   GET /api/admin/sponsors
+ * @access  Private (Admin only)
+ */
+const adminListSponsors = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search, status } = req.query;
+
+  // 1. Build Query
+  const userQuery = { role: 'sponsor' };
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    userQuery.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
+  }
+  const matchingUsers = await User.find(userQuery).select('_id');
+  const userIds = matchingUsers.map(u => u._id);
+
+  const sponsorQuery = { userId: { $in: userIds } };
+  if (status) sponsorQuery.status = status;
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    sponsorQuery.$or = [
+      ...(sponsorQuery.$or || []),
+      { organizationName: regex }
+    ];
+  }
+
+  // 2. Fetch Data
+  const total = await Sponsor.countDocuments(sponsorQuery);
+  const sponsors = await Sponsor.find(sponsorQuery)
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  // 3. Calculate Stats
+  // Annual Contributions (Last 365 days)
+  const oneYearAgo = new Date();
+  oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+  const annualAggregation = await MonetaryDonation.aggregate([
+    { $match: { createdAt: { $gte: oneYearAgo }, status: 'completed' } },
+    { $group: { _id: null, total: { $sum: '$amount' } } }
+  ]);
+  const annualContributions = annualAggregation[0]?.total || 0;
+
+  // In-Kind Valuation
+  const inKindAggregation = await InKindDonation.aggregate([
+    { $group: { _id: null, total: { $sum: { $toDouble: { $ifNull: [ "$estimatedValue", "0" ] } } } } }
+  ]);
+  // Note: $toDouble might fail if estimatedValue has non-numeric characters like '$'. 
+  // For a robust implementation, we'd need cleaner data or a better aggregation.
+  // Assuming seeder will provide numeric-friendly strings or numbers.
+  const inKindValuation = inKindAggregation[0]?.total || 0;
+
+  // Total Active Partners
+  const totalActivePartners = await Sponsor.countDocuments({ status: 'Active' });
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: sponsors.length,
+    stats: {
+      annualContributions,
+      inKindValuation,
+      totalActivePartners
+    },
+    data: sponsors
+  });
+});
+
+/**
+ * @desc    Get single sponsor detail with donation history (Admin)
+ * @route   GET /api/admin/sponsors/:id
+ * @access  Private (Admin only)
+ */
+const adminGetSponsor = asyncHandler(async (req, res, next) => {
+  const sponsor = await Sponsor.findById(req.params.id)
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt');
+
+  if (!sponsor) {
+    return next(new ErrorResponse('Sponsor not found', 404));
+  }
+
+  const donationHistory = await MonetaryDonation.find({ sponsorId: sponsor.userId })
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      ...sponsor._doc,
+      donationHistory
+    }
+  });
+});
+
+/**
+ * @desc    Deactivate/Activate sponsor account
+ * @route   PATCH /api/admin/sponsors/:id/deactivate
+ * @access  Private (Admin only)
+ */
+const adminDeactivateSponsor = asyncHandler(async (req, res, next) => {
+  const sponsor = await Sponsor.findById(req.params.id);
+
+  if (!sponsor) {
+    return next(new ErrorResponse('Sponsor not found', 404));
+  }
+
+  sponsor.status = sponsor.status === 'Active' ? 'Inactive' : 'Active';
+  await sponsor.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Sponsor status changed to ${sponsor.status}`,
+    data: sponsor
+  });
 });
 
 module.exports = { 
@@ -654,4 +1104,19 @@ module.exports = {
   adminGetInKindDonation,
   adminUpdateVolunteerProfile,
   adminUpdateSponsorProfile,
+  adminListPartners,
+  adminListOpportunities,
+  adminGetPartner,
+  adminGetOpportunity,
+  adminCreateOpportunity,
+  adminUpdateOpportunity,
+  adminListSponsors,
+  adminGetSponsor,
+  adminDeactivateSponsor,
+  adminGetSettings,
+  adminUpdateSettings,
+  adminGetProfile,
+  adminUpdateProfile,
+  adminUpdatePassword,
+  adminUploadAgreement,
 };

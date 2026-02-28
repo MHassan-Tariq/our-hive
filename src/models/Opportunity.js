@@ -84,8 +84,8 @@ const OpportunitySchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'active', 'completed', 'cancelled', 'rejected'],
-      default: 'pending',
+      enum: ['Draft', 'Confirmed', 'Pending', 'Completed', 'Cancelled', 'Rejected'],
+      default: 'Pending',
     },
     // Tracks volunteers who have claimed a spot
     attendees: [

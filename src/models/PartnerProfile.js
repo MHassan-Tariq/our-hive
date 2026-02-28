@@ -8,6 +8,11 @@ const PartnerProfileSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    partnerId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     orgName: {
       type: String,
       required: [true, 'Organization name is required'],
@@ -18,6 +23,30 @@ const PartnerProfileSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: [50, 'Organization type cannot be more than 50 characters'],
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    legalEntityName: {
+      type: String,
+      trim: true,
+    },
+    registrationNumber: {
+      type: String,
+      trim: true,
+    },
+    headquarters: {
+      type: String,
+      trim: true,
+    },
+    taxStatus: {
+      type: String,
+      trim: true,
+    },
+    companyOverview: {
+      type: String,
+      trim: true,
     },
     address: {
       type: String,
@@ -35,26 +64,31 @@ const PartnerProfileSchema = new mongoose.Schema(
     intendedRoles: {
       type: [String],
       default: [],
-      // e.g. ['Donating food', 'Hosting events', 'Mentoring youth']
     },
-    agreements: {
-      isAuthorized: {
-        type: Boolean,
-        default: false,
-      },
-      agreedToTerms: {
-        type: Boolean,
-        default: false,
-      },
-      understandOperationalControl: {
-        type: Boolean,
-        default: false,
-      },
+    onboardingScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
     },
+    agreementHistory: [
+      {
+        version: String,
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+        representative: String,
+        status: {
+          type: String,
+          enum: ['Executed', 'Archived', 'Expired'],
+        },
+      },
+    ],
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending',
+      enum: ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'],
+      default: 'Pending',
     },
   },
   {

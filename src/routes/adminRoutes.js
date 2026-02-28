@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
+const upload = require('../middleware/uploadMiddleware');
 const {
   getAllUsers,
   getDashboard,
@@ -20,6 +21,21 @@ const {
   adminGetInKindDonation,
   adminUpdateVolunteerProfile,
   adminUpdateSponsorProfile,
+  adminListPartners,
+  adminListOpportunities,
+  adminGetPartner,
+  adminGetOpportunity,
+  adminCreateOpportunity,
+  adminUpdateOpportunity,
+  adminListSponsors,
+  adminGetSponsor,
+  adminDeactivateSponsor,
+  adminGetSettings,
+  adminUpdateSettings,
+  adminGetProfile,
+  adminUpdateProfile,
+  adminUpdatePassword,
+  adminUploadAgreement,
 } = require('../controllers/adminController');
 
 // All routes here are admin only
@@ -136,7 +152,8 @@ router.get('/users', getAllUsers);
  * @swagger
  * /api/admin/partners/{id}/status:
  *   patch:
- *     summary: Approve or reject a partner organization
+ *     summary: Update a partner organization's account status
+ *     description: Admins can Approve (Active), Reject, Suspend, or mark as Expired. Approving (Active) will sync User.isApproved to true.
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -157,7 +174,7 @@ router.get('/users', getAllUsers);
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [approved, rejected]
+ *                 enum: [Active, Pending, Expired, Suspended, Rejected]
  *     responses:
  *       200:
  *         description: Partner status updated and User.isApproved synced
@@ -166,6 +183,58 @@ router.get('/users', getAllUsers);
  *       404:
  *         description: Partner profile not found
  */
+/**
+ * @swagger
+ * /api/admin/community-partners:
+ *   get:
+ *     summary: List all organisational partners with agreement status
+ *     description: Returns a paginated list of partners. Includes organization name, type, primary contact (user), agreement summary, and status.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by org name, user name, or Partner ID
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [Active, Pending, Expired, Suspended, Rejected] }
+ *     responses:
+ *       200:
+ *         description: List of partners retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 total: { type: integer }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       partnerId: { type: string }
+ *                       orgName: { type: string }
+ *                       orgType: { type: string }
+ *                       status: { type: string }
+ *                       userId:
+ *                         type: object
+ *                         properties:
+ *                           firstName: { type: string }
+ *                           lastName: { type: string }
+ *                           email: { type: string }
+ */
+router.get('/community-partners', adminListPartners);
+
 router.patch('/partners/:id/status', updatePartnerStatus);
 
 /**
@@ -202,6 +271,138 @@ router.patch('/partners/:id/status', updatePartnerStatus);
  *         description: Invalid status value
  *       404:
  *         description: Opportunity not found
+ */
+/**
+ * @swagger
+ * /api/admin/events:
+ *   get:
+ *     summary: List all volunteer opportunities (events)
+ *     description: Returns a paginated list of opportunities with associated partner info.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: List of opportunities retrieved
+ */
+/**
+ * @swagger
+ * /api/admin/opportunities:
+ *   get:
+ *     summary: List all events/opportunities (Admin)
+ *     tags: [Admin Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [Draft, Confirmed, Pending, Completed, Cancelled, Rejected] }
+ *     responses:
+ *       200:
+ *         description: List of events retrieved
+ *   post:
+ *     summary: Create a new event/opportunity (Admin)
+ *     tags: [Admin Events]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, description, date]
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               location: { type: string }
+ *               date: { type: string, format: date }
+ *               time: { type: string }
+ *               endTime: { type: string }
+ *               category: { type: string }
+ *               requiredVolunteers: { type: integer }
+ *               flyerUrl: { type: string }
+ *               status: { type: string, enum: [Draft, Confirmed, Pending] }
+ *     responses:
+ *       201:
+ *         description: Event created
+ */
+router.get('/opportunities', adminListOpportunities);
+router.post('/opportunities', upload.single('flyer'), adminCreateOpportunity);
+router.patch('/events/:id', adminUpdateOpportunity);
+router.get('/events/:id', adminGetOpportunity);
+
+/**
+ * @swagger
+ * /api/admin/community-partners/{id}:
+ *   get:
+ *     summary: Get full partner detail (Admin view)
+ *     description: Returns the complete partner profile including legal information, company overview, onboarding score, and agreement history.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: PartnerProfile document _id
+ *     responses:
+ *       200:
+ *         description: Full partner detail retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     partnerId: { type: string }
+ *                     orgName: { type: string }
+ *                     legalEntityName: { type: string }
+ *                     registrationNumber: { type: string }
+ *                     onboardingScore: { type: integer }
+ *                     agreementHistory: { type: array }
+ */
+router.get('/community-partners/:id', adminGetPartner);
+
+/**
+ * @swagger
+ * /api/admin/events/{id}:
+ *   get:
+ *     summary: Get single event detail
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Event detail retrieved
  */
 router.patch('/opportunities/:id/status', updateOpportunityStatus);
 
@@ -703,6 +904,220 @@ router.patch('/volunteers/:id', adminUpdateVolunteerProfile);
  *       404:
  *         description: Profile not found.
  */
+router.get('/sponsors', adminListSponsors);
+router.get('/sponsors/:id', adminGetSponsor);
+router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
 router.patch('/sponsors/:id', adminUpdateSponsorProfile);
+
+/**
+ * @swagger
+ * /api/admin/settings:
+ *   get:
+ *     summary: Get system-wide settings
+ *     description: Returns links for donation, membership, admin emails, and agreement versioning.
+ *     tags: [Admin Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Settings retrieved
+ *   patch:
+ *     summary: Update system-wide settings
+ *     tags: [Admin Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               primaryAdminEmail: { type: string }
+ *               secondaryAdminEmail: { type: string }
+ *               zeffyDonationLink: { type: string }
+ *               zeffyMembershipLink: { type: string }
+ *               activeAgreementVersion: { type: string }
+ *     responses:
+ *       200:
+ *         description: Settings updated
+ */
+router.get('/settings', adminGetSettings);
+router.patch('/settings', adminUpdateSettings);
+
+/**
+ * @swagger
+ * /api/admin/settings/agreement:
+ *   post:
+ *     summary: Upload a new volunteer agreement (PDF)
+ *     tags: [Admin Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               agreement:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Agreement uploaded
+ */
+router.post('/settings/agreement', upload.single('agreement'), adminUploadAgreement);
+
+/**
+ * @swagger
+ * /api/admin/profile:
+ *   get:
+ *     summary: Get current admin profile
+ *     tags: [Admin Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile retrieved
+ *   patch:
+ *     summary: Update admin profile information
+ *     tags: [Admin Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               phone: { type: string }
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ */
+router.get('/profile', adminGetProfile);
+router.patch('/profile', adminUpdateProfile);
+
+/**
+ * @swagger
+ * /api/admin/profile/password:
+ *   patch:
+ *     summary: Update admin password
+ *     tags: [Admin Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword: { type: string }
+ *     responses:
+ *       200:
+ *         description: Password updated
+ */
+router.patch('/profile/password', adminUpdatePassword);
+
+/**
+ * @swagger
+ * /api/admin/sponsors:
+ *   get:
+ *     summary: List all sponsors with pagination, search, and stats
+ *     description: Returns a paginated list of sponsors. Supports search by organization name/user name and status filter. Includes header stats (Annual Contributions, In-Kind Valuation, Total Active Partners).
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [Active, Inactive] }
+ *     responses:
+ *       200:
+ *         description: Paginated sponsor list and stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     annualContributions: { type: number }
+ *                     inKindValuation: { type: number }
+ *                     totalActivePartners: { type: integer }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       organizationName: { type: string }
+ *                       totalContributed: { type: number }
+ *                       tier: { type: string }
+ *                       status: { type: string }
+ *                       userId:
+ *                         type: object
+ *                         properties:
+ *                           firstName: { type: string }
+ *                           lastName: { type: string }
+ *                           email: { type: string }
+ */
+router.get('/sponsors', adminListSponsors);
+
+/**
+ * @swagger
+ * /api/admin/sponsors/{id}:
+ *   get:
+ *     summary: Get full sponsor detail with donation history
+ *     description: Returns the complete sponsor profile and their monetary donation history.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Full sponsor detail and history
+ */
+router.get('/sponsors/:id', adminGetSponsor);
+
+/**
+ * @swagger
+ * /api/admin/sponsors/{id}/deactivate:
+ *   patch:
+ *     summary: Deactivate or Activate a sponsor account
+ *     description: Toggles the sponsor status between Active and Inactive.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Sponsor status updated
+ */
+router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
 
 module.exports = router;
