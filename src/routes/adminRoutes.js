@@ -1001,7 +1001,7 @@ router.post('/settings/agreement', upload.single('agreement'), adminUploadAgreem
  *         description: Profile updated
  */
 router.get('/profile', adminGetProfile);
-router.patch('/profile', adminUpdateProfile);
+router.patch('/profile', upload.single('profilePicture'), adminUpdateProfile);
 
 /**
  * @swagger

@@ -816,8 +816,6 @@ const adminGetOpportunity = asyncHandler(async (req, res, next) => {
 });
 
 const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
-  console.log('DEBUG: adminCreateOpportunity body:', JSON.stringify(req.body));
-  console.log('DEBUG: adminCreateOpportunity file:', req.file);
   // Logic for admin creating an event
   const opportunityData = {
     ...req.body,
@@ -1007,10 +1005,30 @@ const adminGetProfile = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminUpdateProfile = asyncHandler(async (req, res, next) => {
+  console.log('DEBUG: adminUpdateProfile body:', JSON.stringify(req.body));
+  console.log('DEBUG: adminUpdateProfile file:', req.file);
   const { firstName, lastName, phone } = req.body;
+  
+  const updateData = {};
+  if (firstName) updateData.firstName = firstName;
+  if (lastName) updateData.lastName = lastName;
+  
+  // Only update phone if it's provided and not an empty string
+  if (phone !== undefined && phone !== "") {
+    updateData.phone = phone;
+  } else if (phone === "") {
+    // If they explicitly sent an empty string, we should probably set to undefined
+    // to avoid unique index collision and regex validation failure.
+    updateData.phone = undefined; 
+  }
+
+  if (req.file) {
+    updateData.profilePictureUrl = req.file.path;
+  }
+
   const user = await User.findByIdAndUpdate(
     req.user.id,
-    { firstName, lastName, phone },
+    updateData,
     { new: true, runValidators: true }
   );
   res.status(200).json({ success: true, data: user });
