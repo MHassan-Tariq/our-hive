@@ -815,18 +815,17 @@ const adminGetOpportunity = asyncHandler(async (req, res, next) => {
   res.status(200).json({ success: true, data: opportunity });
 });
 
-/**
- * @desc    Create a new opportunity (event)
- * @route   POST /api/admin/events
- * @access  Private (Admin only)
- */
 const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
   // Logic for admin creating an event
-  // If partnerId is provided in body, use it, otherwise it might be own event
   const opportunityData = {
     ...req.body,
+    partnerId: req.body.partnerId || req.user.id,
     status: req.body.status || 'Pending'
   };
+
+  if (req.file) {
+    opportunityData.flyerUrl = req.file.path;
+  }
 
   const opportunity = await Opportunity.create(opportunityData);
 
@@ -846,9 +845,14 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Opportunity not found', 404));
   }
   
+  const updates = { ...req.body };
+  if (req.file) {
+    updates.flyerUrl = req.file.path;
+  }
+  
   const opportunity = await Opportunity.findByIdAndUpdate(
     req.params.id,
-    req.body,
+    updates,
     { new: true, runValidators: true }
   );
 

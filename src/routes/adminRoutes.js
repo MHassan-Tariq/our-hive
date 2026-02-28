@@ -346,9 +346,9 @@ router.patch('/partners/:id/status', updatePartnerStatus);
  *       201:
  *         description: Event created
  */
-router.get('/opportunities', adminListOpportunities);
-router.post('/opportunities', upload.single('flyer'), adminCreateOpportunity);
-router.patch('/events/:id', adminUpdateOpportunity);
+router.get('/events', adminListOpportunities);
+router.post('/events', upload.single('flyer'), adminCreateOpportunity);
+router.patch('/events/:id', upload.single('flyer'), adminUpdateOpportunity);
 router.get('/events/:id', adminGetOpportunity);
 
 /**
