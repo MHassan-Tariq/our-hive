@@ -73,7 +73,7 @@ const OpportunitySchema = new mongoose.Schema(
       type: String, // e.g. "Brief 10- minute training provided ar the start shift"
       trim: true,
     },
-    flyerUrl: {
+    imageurl: {
       type: String,
       trim: true,
     },

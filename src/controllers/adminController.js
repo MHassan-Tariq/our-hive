@@ -838,7 +838,7 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
   }
 
   if (req.file) {
-    opportunityData.flyerUrl = req.file.path || req.file.secure_url || req.file.url;
+    opportunityData.imageurl = req.file.path || req.file.secure_url || req.file.url;
   }
 
   const opportunity = await Opportunity.create(opportunityData);
@@ -893,7 +893,7 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
   }
 
   if (req.file) {
-    updates.flyerUrl = req.file.path || req.file.secure_url || req.file.url;
+    updates.imageurl = req.file.path || req.file.secure_url || req.file.url;
   }
   
   const opportunity = await Opportunity.findByIdAndUpdate(

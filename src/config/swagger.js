@@ -216,7 +216,7 @@ const options = {
             time: { type: 'string', example: '10:00 AM' },
             endTime: { type: 'string', example: '1:00 PM' },
             type: { type: 'string', enum: ['event', 'opportunity'], example: 'opportunity' },
-            flyerUrl: { type: 'string', example: 'https://example.com/flyer.jpg', nullable: true },
+            imageurl: { type: 'string', example: 'https://example.com/flyer.jpg', nullable: true },
             status: {
               type: 'string',
               enum: ['pending', 'active', 'completed', 'cancelled', 'rejected'],

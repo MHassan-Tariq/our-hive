@@ -138,7 +138,7 @@ exports.getDistributionSchedule = async (req, res) => {
     };
 
     const slots = await Opportunity.find(query)
-      .select('title location specificLocation coordinates date time endTime flyerUrl category partnerId createdAt')
+      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt')
       .populate('partnerId', 'orgName organizationLogoUrl')
       .sort({ createdAt: 1 });
 

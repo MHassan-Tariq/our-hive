@@ -340,7 +340,7 @@ router.patch('/partners/:id/status', updatePartnerStatus);
  *               endTime: { type: string }
  *               category: { type: string }
  *               requiredVolunteers: { type: integer }
- *               flyerUrl: { type: string }
+ *               imageurl: { type: string }
  *               status: { type: string, enum: [Draft, Confirmed, Pending] }
  *     responses:
  *       201:

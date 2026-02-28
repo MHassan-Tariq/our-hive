@@ -258,7 +258,7 @@ router.get('/campaigns', getCampaigns);
  *                       date: { type: string, format: date }
  *                       time: { type: string, example: "9:00 AM" }
  *                       endTime: { type: string, example: "12:00 PM" }
- *                       flyerUrl: { type: string }
+ *                       imageurl: { type: string }
  *                       category: { type: string }
  *                       isOpenNow: { type: boolean, description: "Whether this slot is currently open" }
  *                       closesInMinutes: { type: integer, description: "Minutes until closing (null if not open)" }

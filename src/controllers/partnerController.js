@@ -191,9 +191,9 @@ const createOpportunity = async (req, res) => {
     }
 
     // Handle file upload
-    let flyerUrl = req.body.flyerUrl;
+    let imageurl = req.body.imageurl;
     if (req.file) {
-      flyerUrl = req.file.path;
+      imageurl = req.file.path;
     }
 
     const opportunity = await Opportunity.create({
@@ -209,7 +209,7 @@ const createOpportunity = async (req, res) => {
       category,
       requiredVolunteers,
       type: type || 'opportunity',
-      flyerUrl,
+      imageurl,
       impactStatement,
       physicalRequirements,
       dressCode,
@@ -280,9 +280,9 @@ const updateOpportunity = async (req, res) => {
     }
 
     // Handle file upload
-    let flyerUrl = opportunity.flyerUrl;
+    let imageurl = opportunity.imageurl;
     if (req.file) {
-      flyerUrl = req.file.path;
+      imageurl = req.file.path;
     }
 
     // Check if any fields that require re-approval are being updated
@@ -298,7 +298,7 @@ const updateOpportunity = async (req, res) => {
       'category',
       'requiredVolunteers',
       'type',
-      'flyerUrl',
+      'imageurl',
       'impactStatement',
       'physicalRequirements',
       'dressCode',
@@ -310,8 +310,8 @@ const updateOpportunity = async (req, res) => {
 
     for (const field of fieldsRequiringReapproval) {
       let newValue;
-      if (field === 'flyerUrl') {
-        newValue = flyerUrl;
+      if (field === 'imageurl') {
+        newValue = imageurl;
       } else if (field === 'whatToBring') {
         newValue = parsedWhatToBring;
       } else {
@@ -335,7 +335,7 @@ const updateOpportunity = async (req, res) => {
     opportunity.category = category || opportunity.category;
     opportunity.requiredVolunteers = requiredVolunteers || opportunity.requiredVolunteers;
     opportunity.type = type || opportunity.type;
-    opportunity.flyerUrl = flyerUrl || opportunity.flyerUrl;
+    opportunity.imageurl = imageurl || opportunity.imageurl;
     opportunity.impactStatement = impactStatement || opportunity.impactStatement;
     opportunity.physicalRequirements = physicalRequirements || opportunity.physicalRequirements;
     opportunity.dressCode = dressCode || opportunity.dressCode;
