@@ -282,6 +282,8 @@ const login = asyncHandler(async (req, res, next) => {
   // Check volunteer or partner approval status
   if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
   return console.log('Login attempt for unapproved account:', { email: user.email, role: user.role })  }
+
+  sendTokenResponse(user, 200, res);
 });
 
 /**
