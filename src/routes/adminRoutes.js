@@ -42,6 +42,7 @@ const {
   adminUpdateProfile,
   adminUpdatePassword,
   adminUploadAgreement,
+  adminDeletePartner,
 } = require('../controllers/adminController');
 
 // All routes here are admin only
@@ -394,6 +395,7 @@ router.get('/events/:id', adminGetOpportunity);
  */
 router.get('/community-partners/:id', adminGetPartner);
 router.patch('/community-partners/:id', upload.single('logo'), adminUpdatePartnerProfile);
+router.delete('/community-partners/:id', adminDeletePartner);
 
 /**
  * @swagger

@@ -158,9 +158,10 @@ const getDashboard = asyncHandler(async (req, res, next) => {
  * :id — the PartnerProfile document _id
  */
 const updatePartnerStatus = asyncHandler(async (req, res, next) => {
+  
   let { status } = req.body;
-  const validStatuses = ['approved', 'Pending', 'Expired', 'Suspended', 'Rejected'];
-
+  const validStatuses = ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'];
+console.log(status);  
   // Normalize status from frontend (e.g., 'active' -> 'Active')
   if (status) {
     status = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
@@ -941,6 +942,33 @@ const adminUpdatePartnerProfile = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Delete a partner
+ * @route   DELETE /api/admin/community-partners/:id
+ * @access  Private (Admin only)
+ */
+const adminDeletePartner = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid Partner ID', 400));
+  }
+
+  const partner = await PartnerProfile.findByIdAndDelete(id);
+
+  if (!partner) {
+    return next(new ErrorResponse('Partner profile not found', 404));
+  }
+
+  // Also remove the base user account
+  await User.findByIdAndDelete(partner.userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Partner deleted successfully'
+  });
+});
+
+/**
  * @desc    Get a single opportunity (event) detail
  * @route   GET /api/admin/events/:id
  * @access  Private (Admin only)
@@ -1397,4 +1425,5 @@ module.exports = {
   adminUpdateProfile,
   adminUpdatePassword,
   adminUploadAgreement,
+  adminDeletePartner,
 };
