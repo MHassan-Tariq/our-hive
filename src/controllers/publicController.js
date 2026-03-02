@@ -68,7 +68,7 @@ exports.getOpportunities = async (req, res) => {
     const { search, category } = req.query;
 
     // Build query object
-    const query = { status: 'Confirmed' };
+    const query = { status: { $in: ['Confirmed', 'Active'] } };
 
     if (category) {
       query.category = category;

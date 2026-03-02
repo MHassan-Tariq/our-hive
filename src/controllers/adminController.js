@@ -872,7 +872,7 @@ const adminListOpportunities = asyncHandler(async (req, res, next) => {
   const total = await Opportunity.countDocuments(query);
   const opportunities = await Opportunity.find(query)
     .populate('partnerId', 'firstName lastName email profilePictureUrl')
-    .sort({ date: 1, createdAt: -1 })
+    .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
