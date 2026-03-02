@@ -147,9 +147,19 @@ const getEventDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
+    const eventData = opportunity.toObject();
+    
+    // Calculate occupancy
+    eventData.totalAttendees = eventData.attendees ? eventData.attendees.length : 0;
+    eventData.remainingSpots = Math.max(0, (eventData.requiredVolunteers || 0) - eventData.totalAttendees);
+    
+    // Check registration status
+    const userId = req.user._id;
+    eventData.isRegistered = eventData.attendees.some(id => id.toString() === userId.toString());
+
     res.status(200).json({
       success: true,
-      data: opportunity,
+      data: eventData,
     });
   } catch (err) {
     console.error(err);

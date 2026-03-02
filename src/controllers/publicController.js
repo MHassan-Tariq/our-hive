@@ -139,9 +139,12 @@ exports.getDistributionSchedule = async (req, res) => {
     };
 
     const slots = await Opportunity.find(query)
-      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt')
+      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers')
       .populate('partnerId', 'orgName organizationLogoUrl')
       .sort({ date: 1, time: 1 });
+
+    // If user is authenticated, we'll mark which ones they've registered for
+    const currentUserId = req.user ? req.user.id : null;
 
     // Helper to parse "10:00 AM" or "14:00" into numeric hours/minutes
     const parseTime = (timeStr) => {
@@ -207,6 +210,18 @@ exports.getDistributionSchedule = async (req, res) => {
 
       slotObj.isOpenNow = isOpenNow;
       slotObj.closesInMinutes = closesInMinutes;
+      
+      // Calculate spots remaining logic
+      const attendeesCount = slotObj.attendees ? slotObj.attendees.length : 0;
+      slotObj.totalAttendees = attendeesCount;
+      slotObj.remainingSpots = Math.max(0, (slotObj.requiredVolunteers || 0) - attendeesCount);
+      
+      // Check if current user is registered
+      slotObj.isRegistered = currentUserId ? slotObj.attendees.some(id => id.toString() === currentUserId.toString()) : false;
+      
+      // Clean up for public response
+      delete slotObj.attendees;
+
       return slotObj;
     }).filter(slot => slot !== null);
 
@@ -240,13 +255,18 @@ exports.getOpportunityDetails = async (req, res) => {
     // Convert to plain object to manipulate for the public payload
     const publicOpportunity = opportunity.toObject();
 
-    // Calculate remaining spots
+    // Calculate remaining spots and total attendees
+    publicOpportunity.totalAttendees = publicOpportunity.attendees ? publicOpportunity.attendees.length : 0;
     publicOpportunity.remainingSpots = Math.max(
       0, 
-      (publicOpportunity.requiredVolunteers || 0) - (publicOpportunity.attendees ? publicOpportunity.attendees.length : 0)
+      (publicOpportunity.requiredVolunteers || 0) - publicOpportunity.totalAttendees
     );
 
-    // Strip out sensitive inner details (like the actual attendee IDs, if this is public)
+    // Check if current user is registered
+    const currentUserId = req.user ? req.user.id : null;
+    publicOpportunity.isRegistered = currentUserId ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString()) : false;
+
+    // Strip out sensitive inner details
     delete publicOpportunity.attendees;
 
     res.status(200).json({

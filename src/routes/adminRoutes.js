@@ -22,6 +22,7 @@ const {
   adminListVolunteers,
   adminGetVolunteer,
   adminUpdateVolunteerProfile,
+  adminApproveVolunteer,
   adminUpdateSponsorProfile,
   adminListPartners,
   adminListOpportunities,
@@ -854,6 +855,7 @@ router.patch('/in-kind-donations/:id/status', adminUpdateInKindDonationStatus);
 router.get('/volunteers', adminListVolunteers);
 router.get('/volunteers/:id', adminGetVolunteer);
 router.patch('/volunteers/:id', adminUpdateVolunteerProfile);
+router.patch('/volunteers/:id/approve', adminApproveVolunteer);
 
 /**
  * @swagger

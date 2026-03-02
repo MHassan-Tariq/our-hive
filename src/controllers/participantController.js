@@ -456,8 +456,40 @@ exports.verifyCode = async (req, res) => {
  */
 exports.getPantries = async (req, res) => {
   try {
-    const { search } = req.query;
-    let query = { status: 'Active' };
+    const { search, filter = 'today' } = req.query;
+    const now = new Date();
+    let startDate, endDate;
+
+    // Helper functions for date boundaries
+    const startOfDay = (date) => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    const endOfDay = (date) => {
+      const d = new Date(date);
+      d.setHours(23, 59, 59, 999);
+      return d;
+    };
+
+    if (filter === 'tomorrow') {
+      startDate = startOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+      endDate = endOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+    } else if (filter === 'this_week') {
+      const day = now.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday));
+      endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000));
+    } else {
+      // today
+      startDate = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+      endDate = endOfDay(now);
+    }
+
+    let query = { 
+      status: 'Active',
+      date: { $gte: startDate, $lte: endDate }
+    };
 
     if (search) {
       query.$or = [
@@ -468,33 +500,48 @@ exports.getPantries = async (req, res) => {
     }
 
     const opportunities = await Opportunity.find(query).sort({ date: 1, time: 1 });
+    const currentUserId = req.user._id;
+
+    // Helper to parse time
+    const parseTime = (timeStr) => {
+      if (!timeStr) return null;
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+      if (!match) return null;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const modifier = match[3] ? match[3].toUpperCase() : null;
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      return { hours, minutes };
+    };
 
     const formattedPantries = opportunities.map(opp => {
-      let operatingStatus = 'Upcoming';
+      const oppObj = opp.toObject();
+      let isOpenNow = false;
+      let closesInMinutes = null;
       
-      if (opp.date) {
-        const oppDate = new Date(opp.date);
-        oppDate.setHours(0, 0, 0, 0);
-        
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        if (oppDate < today) {
-          operatingStatus = 'Closed';
-        } else if (oppDate.getTime() === today.getTime()) {
-           if (opp.endTime) {
-              operatingStatus = `Open until ${opp.endTime}`;
-           } else {
-              operatingStatus = 'Open Today';
-           }
-        } else {
-           // Simple short date
-           operatingStatus = `Upcoming on ${oppDate.getMonth() + 1}/${oppDate.getDate()}`;
+      if (oppObj.date && oppObj.time && oppObj.endTime) {
+        const slotDate = new Date(oppObj.date);
+        const startTimeParsed = parseTime(oppObj.time);
+        const endTimeParsed = parseTime(oppObj.endTime);
+
+        if (startTimeParsed && endTimeParsed) {
+          const openTime = new Date(slotDate);
+          openTime.setHours(startTimeParsed.hours, startTimeParsed.minutes, 0, 0);
+          let closeTime = new Date(slotDate);
+          closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
+          if (closeTime < openTime) closeTime.setDate(closeTime.getDate() + 1);
+
+          if (now >= openTime && now <= closeTime) {
+            isOpenNow = true;
+            closesInMinutes = Math.floor((closeTime - now) / (1000 * 60));
+          }
         }
-      } else {
-         if (opp.endTime) operatingStatus = `Open until ${opp.endTime}`;
-         else operatingStatus = 'Open';
       }
+
+      // Calculate occupancy
+      const attendeesCount = oppObj.attendees ? oppObj.attendees.length : 0;
+      const remainingSpots = Math.max(0, (oppObj.requiredVolunteers || 0) - attendeesCount);
 
       return {
         id: opp._id,
@@ -502,7 +549,12 @@ exports.getPantries = async (req, res) => {
         location: opp.location,
         specificLocation: opp.specificLocation,
         category: opp.category,
-        operatingStatus,
+        imageurl: opp.imageurl,
+        isOpenNow,
+        closesInMinutes,
+        totalAttendees: attendeesCount,
+        remainingSpots,
+        isRegistered: opp.attendees.some(id => id.toString() === currentUserId.toString()),
         distance: "0.5 Min", // Mocked for UI
         date: opp.date,
         time: opp.time,

@@ -674,7 +674,7 @@ const adminListVolunteers = asyncHandler(async (req, res, next) => {
   // 3. Fetch Data
   const total = await VolunteerProfile.countDocuments(profileQuery);
   const profiles = await VolunteerProfile.find(profileQuery)
-    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt')
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt isApproved')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
@@ -1014,6 +1014,47 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Approve or Disapprove a volunteer
+ * @route   PATCH /api/admin/volunteers/:id/approve
+ * @access  Private (Admin only)
+ */
+const adminApproveVolunteer = asyncHandler(async (req, res, next) => {
+  const { isApproved } = req.body;
+  
+  const profile = await VolunteerProfile.findById(req.params.id);
+  if (!profile) {
+    return next(new ErrorResponse('Volunteer profile not found', 404));
+  }
+
+  // Update User model
+  await User.findByIdAndUpdate(profile.userId, { isApproved });
+
+  // Update Profile background check status if approving
+  if (isApproved) {
+    profile.backgroundCheckStatus = 'Verified';
+    await profile.save();
+  } else {
+    profile.backgroundCheckStatus = 'Pending';
+    await profile.save();
+  }
+
+  // Activity Log
+  await ActivityLog.create({
+    userId: profile.userId,
+    type: 'Submission Approved',
+    content: isApproved ? 'Your volunteer account has been approved.' : 'Your volunteer account approval has been revoked.',
+    relatedId: profile._id,
+    relatedModel: 'VolunteerProfile',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Volunteer ${isApproved ? 'approved' : 'disapproved'} successfully.`,
+    data: { isApproved }
+  });
+});
+
+/**
  * @desc    Delete an opportunity (event)
  * @route   DELETE /api/admin/events/:id
  * @access  Private (Admin only)
@@ -1297,6 +1338,7 @@ module.exports = {
   adminGetInKindDonation,
   adminUpdateVolunteerProfile,
   adminListVolunteers,
+  adminApproveVolunteer,
   adminGetVolunteer,
   adminUpdateSponsorProfile,
   adminListPartners,

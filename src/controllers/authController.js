@@ -86,6 +86,106 @@ const register = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Consolidated Volunteer Registration
+ * @route   POST /api/auth/volunteer-register
+ * @access  Public
+ */
+const volunteerRegister = asyncHandler(async (req, res, next) => {
+  let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress } = req.body;
+
+  // Handle single "fullName" field from UI if firstName/lastName missing
+  if (fullName && (!firstName || !lastName)) {
+    const parts = fullName.trim().split(' ');
+    if (!firstName) firstName = parts[0] || '';
+    if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+  }
+
+  // Check if email or phone already exists
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    return next(new ErrorResponse('A user with that email already exists', 400));
+  }
+
+  if (phone) {
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return next(new ErrorResponse('A user with that phone number already exists', 400));
+    }
+  }
+
+  // Handle stringified fields from multipart/form-data
+  if (typeof skills === 'string') {
+    try {
+      skills = skills.startsWith('[') ? JSON.parse(skills) : skills.split(',').map(s => s.trim());
+    } catch (e) {
+      skills = skills.split(',').map(s => s.trim());
+    }
+  }
+  if (typeof availability === 'string') {
+    try {
+      availability = JSON.parse(availability);
+    } catch (e) {
+      console.error("Error parsing availability JSON:", e);
+    }
+  }
+
+  // Create user - Volunteers are NOT approved by default
+  const user = await User.create({
+    firstName,
+    lastName,
+    email,
+    password,
+    phone,
+    role: 'volunteer',
+    isApproved: false,
+    mailingAddress
+  });
+
+  // Handle uploaded files
+  let governmentIdUrl = '';
+  let drivingLicenseUrl = '';
+
+  if (req.files) {
+    if (req.files.governmentId) {
+      governmentIdUrl = req.files.governmentId[0].path;
+    }
+    if (req.files.drivingLicense) {
+      drivingLicenseUrl = req.files.drivingLicense[0].path;
+    }
+  }
+
+  // Create Volunteer Profile
+  await VolunteerProfile.create({
+    userId: user._id,
+    fullName: fullName || `${firstName} ${lastName}`,
+    phone: phone || user.phone,
+    skills: skills || [],
+    availability: availability || {
+      morning: false,
+      afternoon: false,
+      evenings: false,
+      weekend: false
+    },
+    governmentIdUrl,
+    drivingLicenseUrl,
+    backgroundCheckStatus: 'Pending'
+  });
+
+  // For consolidated signup, we return success but maybe not a token yet
+  // to enforce the "wait for approval" flow if they try to log in immediately.
+  res.status(201).json({
+    success: true,
+    message: 'Volunteer registration submitted successfully. Your account is pending admin approval.',
+    user: {
+      _id: user._id,
+      email: user.email,
+      role: user.role,
+      isApproved: user.isApproved
+    }
+  });
+});
+
+/**
  * @desc    Login user
  * @route   POST /api/auth/login
  * @access  Public
@@ -108,6 +208,11 @@ const login = asyncHandler(async (req, res, next) => {
   const isMatch = await user.matchPassword(password);
   if (!isMatch) {
     return next(new ErrorResponse('Invalid credentials', 401));
+  }
+
+  // Check volunteer approval status
+  if (user.role === 'volunteer' && !user.isApproved) {
+    return next(new ErrorResponse('Account pending approval. Please wait for an administrator to verify your credentials.', 403));
   }
 
   sendTokenResponse(user, 200, res);
@@ -236,4 +341,4 @@ const resetPassword = asyncHandler(async (req, res, next) => {
   sendTokenResponse(user, 200, res);
 });
 
-module.exports = { register, login, logout, checkAvailability, forgotPassword, resetPassword };
+module.exports = { register, volunteerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };

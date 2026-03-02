@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, logout, checkAvailability, forgotPassword, resetPassword } = require('../controllers/authController');
+const { register, login, logout, checkAvailability, forgotPassword, resetPassword, volunteerRegister } = require('../controllers/authController');
 
 /**
  * @swagger
@@ -70,6 +70,41 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+/**
+ * @swagger
+ * /api/auth/volunteer-register:
+ *   post:
+ *     summary: Consolidated Volunteer Registration with documents
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password]
+ *             properties:
+ *               fullName: { type: string, example: "Jane Doe" }
+ *               email: { type: string, format: email, example: "jane@ourhive.com" }
+ *               password: { type: string, minLength: 6, example: "password123" }
+ *               phone: { type: string, example: "(555) 000-0000" }
+ *               skills: { type: string, description: "JSON array or comma-separated string" }
+ *               availability: { type: string, description: "JSON object string" }
+ *               governmentId: { type: string, format: binary }
+ *               drivingLicense: { type: string, format: binary }
+ *     responses:
+ *       201:
+ *         description: Volunteer registered and pending approval.
+ */
+router.post(
+  '/volunteer-register',
+  require('../middleware/uploadMiddleware').fields([
+    { name: 'governmentId', maxCount: 1 },
+    { name: 'drivingLicense', maxCount: 1 },
+  ]),
+  volunteerRegister
+);
+
 router.post('/register', register);
 
 /**
