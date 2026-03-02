@@ -255,16 +255,25 @@ exports.getOpportunityDetails = async (req, res) => {
     // Convert to plain object to manipulate for the public payload
     const publicOpportunity = opportunity.toObject();
 
-    // Calculate remaining spots and total attendees
-    publicOpportunity.totalAttendees = publicOpportunity.attendees ? publicOpportunity.attendees.length : 0;
-    publicOpportunity.remainingSpots = Math.max(
-      0, 
-      (publicOpportunity.requiredVolunteers || 0) - publicOpportunity.totalAttendees
-    );
-
     // Check if current user is registered
     const currentUserId = req.user ? req.user.id : null;
     publicOpportunity.isRegistered = currentUserId ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString()) : false;
+
+    // Fetch Partner Details if applicable
+    if (publicOpportunity.partnerId && (publicOpportunity.partnerId.role === 'partner' || publicOpportunity.partnerId.role === 'admin')) {
+      const partnerProfile = await PartnerProfile.findOne({ userId: publicOpportunity.partnerId._id });
+      if (partnerProfile) {
+        publicOpportunity.organizerName = partnerProfile.orgName;
+        publicOpportunity.organizerLogo = partnerProfile.organizationLogoUrl;
+      }
+    }
+    
+    // Fallback for organizerName if still missing
+    if (!publicOpportunity.organizerName && publicOpportunity.partnerId) {
+      publicOpportunity.organizerName = `${publicOpportunity.partnerId.firstName} ${publicOpportunity.partnerId.lastName}`;
+    }
+    
+    publicOpportunity.organizerPhone = publicOpportunity.partnerId?.phone || '';
 
     // Strip out sensitive inner details
     delete publicOpportunity.attendees;

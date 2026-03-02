@@ -1,6 +1,7 @@
 const Opportunity = require('../models/Opportunity');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const ActivityLog = require('../models/ActivityLog');
+const PartnerProfile = require('../models/PartnerProfile');
 
 /**
  * @desc    Get all upcoming active opportunities (Events)
@@ -156,6 +157,22 @@ const getEventDetails = async (req, res) => {
     // Check registration status
     const userId = req.user._id;
     eventData.isRegistered = eventData.attendees.some(id => id.toString() === userId.toString());
+
+    // Fetch Partner Details if applicable
+    if (eventData.partnerId && (eventData.partnerId.role === 'partner' || eventData.partnerId.role === 'admin')) {
+      const partnerProfile = await PartnerProfile.findOne({ userId: eventData.partnerId._id });
+      if (partnerProfile) {
+        eventData.organizerName = partnerProfile.orgName;
+        eventData.organizerLogo = partnerProfile.organizationLogoUrl;
+      }
+    }
+    
+    // Fallback for organizerName if still missing
+    if (!eventData.organizerName && eventData.partnerId) {
+      eventData.organizerName = `${eventData.partnerId.firstName} ${eventData.partnerId.lastName}`;
+    }
+    
+    eventData.organizerPhone = eventData.partnerId?.phone || '';
 
     res.status(200).json({
       success: true,
