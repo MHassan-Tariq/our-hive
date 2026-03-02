@@ -283,6 +283,9 @@ const login = asyncHandler(async (req, res, next) => {
 if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
     return res.json({
         Status: 200,
+        Isapproved: false,
+        role: user.role,
+       
         success: false,
         message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
     });
