@@ -281,10 +281,7 @@ const login = asyncHandler(async (req, res, next) => {
 
   // Check volunteer or partner approval status
   if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
-    return next(new ErrorResponse('Account pending approval. Please wait for an administrator to verify your credentials.', 403));
-  }
-
-  sendTokenResponse(user, 200, res);
+  return console.log('Login attempt for unapproved account:', { email: user.email, role: user.role })  }
 });
 
 /**
