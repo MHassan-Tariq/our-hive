@@ -222,8 +222,6 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
 
   // Create User - Partners are NOT approved by default
   const user = await User.create({
-    firstName,
-    lastName,
     email,
     password,
     phone,
