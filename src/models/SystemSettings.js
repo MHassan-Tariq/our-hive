@@ -30,6 +30,14 @@ const SystemSettingsSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    socialLinks: {
+      facebook: { type: String, trim: true, default: '' },
+      instagram: { type: String, trim: true, default: '' },
+      twitter: { type: String, trim: true, default: '' },
+      linkedin: { type: String, trim: true, default: '' },
+      youtube: { type: String, trim: true, default: '' },
+      tiktok: { type: String, trim: true, default: '' },
+    },
   },
   {
     timestamps: true,
