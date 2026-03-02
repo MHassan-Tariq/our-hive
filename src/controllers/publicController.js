@@ -78,9 +78,25 @@ exports.getOpportunities = async (req, res) => {
       query.title = { $regex: search, $options: 'i' };
     }
 
-    const opportunities = await Opportunity.find(query)
-      .select('title description location date category requiredVolunteers')
+    const opportunitiesRaw = await Opportunity.find(query)
+      .select('title description location date category requiredVolunteers imageurl time endTime partnerId')
       .sort({ createdAt: -1 });
+
+    // Enrich with PartnerProfile data
+    const opportunities = await Promise.all(opportunitiesRaw.map(async (opp) => {
+      const oppObj = opp.toObject();
+      if (oppObj.partnerId) {
+        const partnerProfile = await PartnerProfile.findOne({ userId: oppObj.partnerId });
+        if (partnerProfile) {
+          oppObj.partnerId = {
+            _id: oppObj.partnerId,
+            orgName: partnerProfile.orgName,
+            organizationLogoUrl: partnerProfile.organizationLogoUrl
+          };
+        }
+      }
+      return oppObj;
+    }));
 
     res.status(200).json({
       success: true,
@@ -140,8 +156,15 @@ exports.getDistributionSchedule = async (req, res) => {
 
     const slots = await Opportunity.find(query)
       .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers')
-      .populate('partnerId', 'orgName organizationLogoUrl')
       .sort({ date: 1, time: 1 });
+
+    // Pre-fetch all partner profiles to avoid N+1 issues in the map below
+    const partnerIds = [...new Set(slots.map(s => s.partnerId.toString()))];
+    const partnerProfiles = await PartnerProfile.find({ userId: { $in: partnerIds } });
+    const profileMap = partnerProfiles.reduce((map, p) => {
+      map[p.userId.toString()] = p;
+      return map;
+    }, {});
 
     // If user is authenticated, we'll mark which ones they've registered for
     const currentUserId = req.user ? req.user.id : null;
@@ -222,6 +245,18 @@ exports.getDistributionSchedule = async (req, res) => {
       // Clean up for public response
       delete slotObj.attendees;
 
+      // Enrich with PartnerProfile data
+      const partnerProfile = profileMap[slotObj.partnerId?.toString()];
+      if (partnerProfile) {
+        slotObj.partnerId = {
+          _id: slotObj.partnerId,
+          orgName: partnerProfile.orgName,
+          organizationLogoUrl: partnerProfile.organizationLogoUrl
+        };
+      } else if (slotObj.partnerId) {
+        slotObj.partnerId = { _id: slotObj.partnerId, orgName: 'Our Hive Partner' };
+      }
+
       return slotObj;
     }).filter(slot => slot !== null);
 
@@ -260,11 +295,19 @@ exports.getOpportunityDetails = async (req, res) => {
     publicOpportunity.isRegistered = currentUserId ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString()) : false;
 
     // Fetch Partner Details if applicable
-    if (publicOpportunity.partnerId && (publicOpportunity.partnerId.role === 'partner' || publicOpportunity.partnerId.role === 'admin')) {
+    if (publicOpportunity.partnerId) {
       const partnerProfile = await PartnerProfile.findOne({ userId: publicOpportunity.partnerId._id });
       if (partnerProfile) {
+        // Enrich the partnerId object directly for consistency with list views
+        publicOpportunity.partnerId.orgName = partnerProfile.orgName;
+        publicOpportunity.partnerId.organizationLogoUrl = partnerProfile.organizationLogoUrl;
+        
+        // Also provide these at the top level as the mobile app might expect them there
         publicOpportunity.organizerName = partnerProfile.orgName;
         publicOpportunity.organizerLogo = partnerProfile.organizationLogoUrl;
+        
+        // Ensure profilePictureUrl is also set to the logo for compatibility
+        publicOpportunity.partnerId.profilePictureUrl = partnerProfile.organizationLogoUrl;
       }
     }
     
