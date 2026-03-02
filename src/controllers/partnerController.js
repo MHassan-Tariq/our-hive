@@ -2,6 +2,7 @@ const PartnerProfile = require('../models/PartnerProfile');
 const Opportunity = require('../models/Opportunity');
 const InKindDonation = require('../models/InKindDonation');
 const ActivityLog = require('../models/ActivityLog');
+const User = require('../models/User');
 
 /**
  * @desc    Submit or update partner onboarding profile
@@ -121,9 +122,13 @@ const getDashboardData = async (req, res) => {
       status: { $ne: 'delivered' },
     }).populate('donorId', 'name');
 
+    // 4. Get User Profile (for greeting firstName)
+    const user = await User.findById(partnerId).select('firstName lastName email');
+
     res.status(200).json({
       success: true,
       data: {
+        user,
         profile,
         activities,
         pendingPickups,
