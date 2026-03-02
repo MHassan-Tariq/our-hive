@@ -158,8 +158,13 @@ const getDashboard = asyncHandler(async (req, res, next) => {
  * :id — the PartnerProfile document _id
  */
 const updatePartnerStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body;
+  let { status } = req.body;
   const validStatuses = ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'];
+
+  // Normalize status from frontend (e.g., 'active' -> 'Active')
+  if (status) {
+    status = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  }
 
   if (!validStatuses.includes(status)) {
     return next(new ErrorResponse(`Status must be one of: ${validStatuses.join(', ')}`, 400));
@@ -182,7 +187,8 @@ const updatePartnerStatus = asyncHandler(async (req, res, next) => {
   });
 
   // Activity Log
-  if (status === 'approved') {
+  if (status === 'Active') {
+    const ActivityLog = require('../models/ActivityLog'); // Ensure model is available
     await ActivityLog.create({
       userId: profile.userId,
       type: 'Submission Approved',
