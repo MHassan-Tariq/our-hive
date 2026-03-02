@@ -280,15 +280,16 @@ const login = asyncHandler(async (req, res, next) => {
   }
 
   // Check volunteer or partner approval status
-  if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
-    return  res.json({
-      Status: 200,
-      success: false,
-      message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
+if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
+    return res.json({
+        Status: 200,
+        success: false,
+        message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
     });
- 
+}
 
-  sendTokenResponse(user, 200, res);
+// If the user is approved, send token response
+sendTokenResponse(user, 200, res);
 });
 
 /**
