@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, logout, checkAvailability, forgotPassword, resetPassword, volunteerRegister } = require('../controllers/authController');
+const { register, login, logout, checkAvailability, forgotPassword, resetPassword, volunteerRegister, partnerRegister } = require('../controllers/authController');
 
 /**
  * @swagger
@@ -104,6 +104,36 @@ router.post(
   ]),
   volunteerRegister
 );
+
+/**
+ * @swagger
+ * /api/auth/partner-register:
+ *   post:
+ *     summary: Consolidated Community Partner Registration
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, email, password, orgName]
+ *             properties:
+ *               firstName: { type: string, example: "John" }
+ *               lastName: { type: string, example: "Smith" }
+ *               email: { type: string, format: email, example: "john@springfieldfoodbank.org" }
+ *               password: { type: string, minLength: 6, example: "password123" }
+ *               phone: { type: string, example: "(555) 123-4567" }
+ *               orgName: { type: string, example: "Springfield Food Bank" }
+ *               orgType: { type: string, example: "Non-Profit" }
+ *               orgAddress: { type: string, example: "742 Evergreen Terrace" }
+ *               website: { type: string, example: "https://springfieldfoodbank.org" }
+ *               intendedRoles: { type: array, items: { type: string }, example: ["Donating goods", "Hosting meal distributions"] }
+ *     responses:
+ *       201:
+ *         description: Partner registered and pending approval.
+ */
+router.post('/partner-register', partnerRegister);
 
 router.post('/register', register);
 

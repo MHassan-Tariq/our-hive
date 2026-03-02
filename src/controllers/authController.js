@@ -2,6 +2,7 @@ const User = require('../models/User');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const Sponsor = require('../models/Sponsor');
 const ParticipantProfile = require('../models/ParticipantProfile');
+const PartnerProfile = require('../models/PartnerProfile');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
@@ -186,6 +187,72 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Consolidated Partner Registration
+ * @route   POST /api/auth/partner-register
+ * @access  Public
+ */
+const partnerRegister = asyncHandler(async (req, res, next) => {
+  const { 
+    firstName, 
+    lastName, 
+    email, 
+    password, 
+    phone,
+    orgName,
+    orgType,
+    orgAddress,
+    website,
+    intendedRoles 
+  } = req.body;
+
+  // Check if email or phone already exists
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    return next(new ErrorResponse('A user with that email already exists', 400));
+  }
+
+  if (phone) {
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return next(new ErrorResponse('A user with that phone number already exists', 400));
+    }
+  }
+
+  // Create User - Partners are NOT approved by default
+  const user = await User.create({
+    firstName,
+    lastName,
+    email,
+    password,
+    phone,
+    role: 'partner',
+    isApproved: false
+  });
+
+  // Create Partner Profile
+  await PartnerProfile.create({
+    userId: user._id,
+    orgName,
+    orgType,
+    address: orgAddress,
+    website,
+    intendedRoles: Array.isArray(intendedRoles) ? intendedRoles : (intendedRoles ? intendedRoles.split(',').map(r => r.trim()) : []),
+    status: 'Pending'
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Partner registration submitted successfully. Your account is pending admin approval.',
+    user: {
+      _id: user._id,
+      email: user.email,
+      role: user.role,
+      isApproved: user.isApproved
+    }
+  });
+});
+
+/**
  * @desc    Login user
  * @route   POST /api/auth/login
  * @access  Public
@@ -210,8 +277,8 @@ const login = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Invalid credentials', 401));
   }
 
-  // Check volunteer approval status
-  if (user.role === 'volunteer' && !user.isApproved) {
+  // Check volunteer or partner approval status
+  if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
     return next(new ErrorResponse('Account pending approval. Please wait for an administrator to verify your credentials.', 403));
   }
 
@@ -341,4 +408,4 @@ const resetPassword = asyncHandler(async (req, res, next) => {
   sendTokenResponse(user, 200, res);
 });
 
-module.exports = { register, volunteerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };
+module.exports = { register, volunteerRegister, partnerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };
