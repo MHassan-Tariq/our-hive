@@ -25,6 +25,7 @@ const {
   adminApproveVolunteer,
   adminUpdateSponsorProfile,
   adminListPartners,
+  adminUpdatePartnerProfile,
   adminListOpportunities,
   adminGetPartner,
   adminGetOpportunity,
@@ -392,6 +393,7 @@ router.get('/events/:id', adminGetOpportunity);
  *                     agreementHistory: { type: array }
  */
 router.get('/community-partners/:id', adminGetPartner);
+router.patch('/community-partners/:id', upload.single('logo'), adminUpdatePartnerProfile);
 
 /**
  * @swagger

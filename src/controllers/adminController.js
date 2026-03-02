@@ -903,6 +903,38 @@ const adminGetPartner = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Update a partner profile
+ * @route   PATCH /api/admin/community-partners/:id
+ * @access  Private (Admin only)
+ * :id — the PartnerProfile document _id
+ */
+const adminUpdatePartnerProfile = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid Partner ID', 400));
+  }
+
+  const updates = { ...req.body };
+  
+  if (req.file) {
+    updates.organizationLogoUrl = req.file.path;
+  }
+
+  const partner = await PartnerProfile.findByIdAndUpdate(
+    id,
+    { $set: updates },
+    { new: true, runValidators: true }
+  );
+
+  if (!partner) {
+    return next(new ErrorResponse('Partner profile not found', 404));
+  }
+
+  res.status(200).json({ success: true, data: partner });
+});
+
+/**
  * @desc    Get a single opportunity (event) detail
  * @route   GET /api/admin/events/:id
  * @access  Private (Admin only)
@@ -1342,6 +1374,7 @@ module.exports = {
   adminGetVolunteer,
   adminUpdateSponsorProfile,
   adminListPartners,
+  adminUpdatePartnerProfile,
   adminListOpportunities,
   adminGetPartner,
   adminGetOpportunity,
