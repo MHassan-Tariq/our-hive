@@ -141,7 +141,7 @@ const getMyRegisteredEvents = async (req, res) => {
 const getEventDetails = async (req, res) => {
   try {
     const opportunity = await Opportunity.findById(req.params.id)
-      .populate('partnerId', 'firstName lastName email profilePictureUrl');
+      .populate('partnerId', 'firstName lastName email profilePictureUrl orgName phone');
 
     if (!opportunity) {
       return res.status(404).json({ success: false, message: 'Event not found.' });

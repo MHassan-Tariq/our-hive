@@ -246,7 +246,7 @@ exports.getDistributionSchedule = async (req, res) => {
 exports.getOpportunityDetails = async (req, res) => {
   try {
     const opportunity = await Opportunity.findById(req.params.id)
-      .populate('partnerId', 'firstName lastName email profilePictureUrl orgName');
+      .populate('partnerId', 'firstName lastName email profilePictureUrl orgName phone');
 
     if (!opportunity) {
       return res.status(404).json({ success: false, message: 'Opportunity not found.' });
