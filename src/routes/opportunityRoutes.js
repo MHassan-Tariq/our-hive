@@ -44,6 +44,7 @@ router.get('/upcoming', getUpcomingEvents);
  */
 router.get('/my-registered', getMyRegisteredEvents);
 
+
 /**
  * @swagger
  * /api/opportunities/{id}/join:
@@ -162,7 +163,7 @@ router.get('/:id', getEventDetails);
  *       400:
  *         description: Validation error (e.g., missing title or description).
  */
-router.post('/', authorize('partner'), upload.single('flyer'), createOpportunity);
+router.post('/', authorize('partner'), upload.single('imageurl'), createOpportunity);
 
 /**
  * @swagger

@@ -159,7 +159,7 @@ const getDashboard = asyncHandler(async (req, res, next) => {
  */
 const updatePartnerStatus = asyncHandler(async (req, res, next) => {
   let { status } = req.body;
-  const validStatuses = ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'];
+  const validStatuses = ['approved', 'Pending', 'Expired', 'Suspended', 'Rejected'];
 
   // Normalize status from frontend (e.g., 'active' -> 'Active')
   if (status) {

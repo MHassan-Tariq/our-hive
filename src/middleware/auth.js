@@ -8,14 +8,19 @@ const User = require('../models/User');
 const protect = async (req, res, next) => {
   let token;
 
+  console.log('🔐 Protect middleware triggered');
+
+  // 1️⃣ Extract token
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer ')
   ) {
     token = req.headers.authorization.split(' ')[1];
+    console.log('📌 Token received:', token);
   }
 
   if (!token) {
+    console.log('❌ No token provided');
     return res.status(401).json({
       success: false,
       message: 'Not authorized — no token provided',
@@ -23,18 +28,36 @@ const protect = async (req, res, next) => {
   }
 
   try {
+    // 2️⃣ Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id);
+    console.log('✅ Token decoded successfully:', decoded);
 
-    if (!req.user) {
+    // 3️⃣ Fetch user from DB
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      console.log('❌ User not found for decoded ID:', decoded.id);
       return res.status(401).json({
         success: false,
         message: 'Not authorized — user no longer exists',
       });
     }
 
+    // 4️⃣ Attach user to request
+    req.user = user;
+
+    console.log('👤 Authenticated user:', {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    });
+
     next();
+
   } catch (err) {
+    console.log('❌ Token verification failed');
+    console.log('Error:', err.message);
+
     return res.status(401).json({
       success: false,
       message: 'Not authorized — token invalid or expired',
