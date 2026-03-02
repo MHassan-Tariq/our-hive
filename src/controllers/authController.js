@@ -174,8 +174,10 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
 
   // For consolidated signup, we return success but maybe not a token yet
   // to enforce the "wait for approval" flow if they try to log in immediately.
+  const token = user.getSignedJwtToken();
   res.status(201).json({
     success: true,
+    token,
     message: 'Volunteer registration submitted successfully. Your account is pending admin approval.',
     user: {
       _id: user._id,
@@ -240,8 +242,10 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     status: 'Pending'
   });
 
+  const token = user.getSignedJwtToken();
   res.status(201).json({
     success: true,
+    token,
     message: 'Partner registration submitted successfully. Your account is pending admin approval.',
     user: {
       _id: user._id,
