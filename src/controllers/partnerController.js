@@ -3,6 +3,7 @@ const Opportunity = require('../models/Opportunity');
 const InKindDonation = require('../models/InKindDonation');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
+const mongoose = require('mongoose'); // Ensure mongoose is imported for ObjectId validation
 
 /**
  * @desc    Submit or update partner onboarding profile
@@ -11,8 +12,15 @@ const User = require('../models/User');
  */
 const submitProfile = async (req, res) => {
   try {
-    let { orgName, orgType, address, website, intendedRoles, agreements } =
+    let { firstName, lastName, fullName, orgName, orgType, address, website, intendedRoles, agreements } =
       req.body;
+
+    // Handle fullName field - split into firstName and lastName
+    if (fullName && (!firstName || !lastName)) {
+      const parts = fullName.trim().split(' ');
+      if (!firstName) firstName = parts[0] || '';
+      if (!lastName) lastName = parts.slice(1).join(' ') || 'Partner';
+    }
 
     // Handle file upload
     let organizationLogoUrl = req.body.organizationLogoUrl;
@@ -34,11 +42,33 @@ const submitProfile = async (req, res) => {
       } catch (e) {}
     }
 
+    // Update user profile if name fields are provided
+    let name;
+    if (fullName) {
+      name = fullName;
+    } else if (firstName || lastName) {
+      // combine whatever we have
+      name = `${firstName || ''} ${lastName || ''}`.trim();
+    }
+
+    if (firstName || lastName) {
+      const userUpdateData = {};
+      if (firstName) userUpdateData.firstName = firstName;
+      if (lastName) userUpdateData.lastName = lastName;
+      
+      await User.findByIdAndUpdate(
+        req.user._id,
+        userUpdateData,
+        { new: true, runValidators: true }
+      );
+    }
+
     // Upsert: create if not exists, update if it does
     const profile = await PartnerProfile.findOneAndUpdate(
       { userId: req.user._id },
       {
         userId: req.user._id,
+        name,
         orgName,
         orgType,
         address,
@@ -81,6 +111,7 @@ const submitProfile = async (req, res) => {
  */
 const getMyProfile = async (req, res) => {
   try {
+    // Fetch partner profile and populate user info
     const profile = await PartnerProfile.findOne({
       userId: req.user._id,
     }).populate('userId', 'firstName lastName email');
@@ -92,12 +123,192 @@ const getMyProfile = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: profile });
+    // compute fullName for easier consumption on client
+    if (profile.userId) {
+      const { firstName = '', lastName = '' } = profile.userId;
+      profile.userId.fullName = `${firstName} ${lastName}`.trim();
+      // if name not stored, set from user data
+      if (!profile.name) {
+        profile.name = profile.userId.fullName;
+      }
+    }
+    // Ensure partnerId is an ObjectId
+    const partnerId =
+      req.user._id instanceof mongoose.Types.ObjectId
+        ? req.user._id
+        : new mongoose.Types.ObjectId(req.user._id);
+
+    // Total events and pending events
+    const totalEvents = await Opportunity.countDocuments({ partnerId });
+    const pendingEvents = await Opportunity.countDocuments({
+      partnerId,
+      status: 'Pending',
+    });
+
+    // Sum of attendees across all partner events
+    const volunteersAgg = await Opportunity.aggregate([
+      { $match: { partnerId } },
+      {
+        $project: {
+          attendeesCount: { $size: { $ifNull: ['$attendees', []] } },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$attendeesCount' } } },
+    ]);
+
+    const totalVolunteers =
+      (volunteersAgg[0] && volunteersAgg[0].total) || 0;
+
+    // Respond with profile and stats
+    res.status(200).json({
+      success: true,
+      data: {
+        profile,
+        stats: {
+          totalEvents,
+          pendingEvents,
+          totalVolunteers,
+        },
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error('getMyProfile error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+
+/**
+ * @desc    Update logged-in partner's profile
+ * @route   PATCH /api/partners/my-profile
+ * @access  Private (partner)
+ */
+const updateProfile = async (req, res) => {
+  try {
+    let { firstName, lastName, fullName, orgName, orgType, orgAddress, website, intendedRoles, agreements } =
+      req.body;
+    // Handle fullName field - split into firstName and lastName
+    if (fullName && (!firstName || !lastName)) {
+      const parts = fullName.trim().split(' ');
+      if (!firstName) firstName = parts[0] || '';
+      if (!lastName) lastName = parts.slice(1).join(' ') || 'Partner';
+    }
+
+    // determine combined name to store
+    let name;
+    if (fullName) {
+      name = fullName;
+    } else if (firstName || lastName) {
+      name = `${firstName || ''} ${lastName || ''}`.trim();
+    }
+
+    // Find existing partner profile
+    let profile = await PartnerProfile.findOne({ userId: req.user._id });
+
+    // Build update object for partner profile with only provided fields
+    const updateData = {};
+    if (name || fullName) {
+      updateData.name = name || fullName;
+    }    if (orgName !== undefined) updateData.orgName = orgName;
+    if (orgType !== undefined) updateData.orgType = orgType;
+    // support both address fields for compatibility
+    if (orgAddress !== undefined) updateData.address = orgAddress;
+    // if (address !== undefined) updateData.address = address;
+    if (website !== undefined) updateData.website = website;
+
+    // if no profile exists yet, we'll create it later after applying updates
+
+    // Handle intendedRoles - parse if it's a string
+    if (intendedRoles !== undefined) {
+      if (typeof intendedRoles === 'string') {
+        try {
+          updateData.intendedRoles = JSON.parse(intendedRoles);
+        } catch (e) {
+          updateData.intendedRoles = intendedRoles.split(',').map(r => r.trim());
+        }
+      } else {
+        updateData.intendedRoles = intendedRoles;
+      }
+    }
+
+    // Handle agreements - parse if it's a string
+    if (agreements !== undefined) {
+      if (typeof agreements === 'string') {
+        try {
+          updateData.agreements = JSON.parse(agreements);
+        } catch (e) {
+          updateData.agreements = agreements;
+        }
+      } else {
+        updateData.agreements = agreements;
+      }
+    }
+
+    // Handle file upload
+    if (req.file) {
+      updateData.organizationLogoUrl = req.file.path;
+    }
+
+    // Update user profile if name fields are provided
+    if (firstName || lastName) {
+      const userUpdateData = {};
+      if (firstName) userUpdateData.firstName = firstName;
+      if (lastName) userUpdateData.lastName = lastName;
+      
+      await User.findByIdAndUpdate(
+        req.user._id,
+        userUpdateData,
+        { new: true, runValidators: true }
+      );
+    }
+
+    // Update or create partner profile
+    let updatedProfile;
+    if (!profile) {
+      // creating new profile (userId is required)
+      updatedProfile = await PartnerProfile.create({
+        userId: req.user._id,
+        ...updateData,
+      });
+    } else {
+      updatedProfile = await PartnerProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        updateData,
+        { new: true, runValidators: true }
+      );
+    }
+
+    // populate user info and compute fullName for response
+    updatedProfile = await PartnerProfile.findById(updatedProfile._id).populate('userId','firstName lastName email');
+    if (updatedProfile.userId) {
+      const { firstName='', lastName='' } = updatedProfile.userId;
+      updatedProfile.userId.fullName = `${firstName} ${lastName}`.trim();
+    }
+
+    // Activity Log
+    await ActivityLog.create({
+      userId: req.user._id,
+      type: 'Profile Updated',
+      content: 'You updated your organization profile.',
+      relatedId: updatedProfile._id,
+      relatedModel: 'PartnerProfile',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Partner profile updated successfully.',
+      data: updatedProfile,
+    });
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map((e) => e.message);
+      return res.status(400).json({ success: false, message: messages });
+    }
+    console.error('updateProfile error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 
 /**
  * @desc    Get partner dashboard overview
@@ -150,7 +361,6 @@ const getDashboardData = async (req, res) => {
  */
 const createOpportunity = async (req, res) => {
   try {
-    // ── Business Logic: only approved partners can post opportunities ──
     const profile = await PartnerProfile.findOne({ userId: req.user._id });
 
     if (!profile) {
@@ -173,7 +383,7 @@ const createOpportunity = async (req, res) => {
       description,
       location,
       specificLocation,
-      whatToBring,
+      whatToBring: rawWhatToBring,
       date,
       time,
       endTime,
@@ -186,17 +396,24 @@ const createOpportunity = async (req, res) => {
       orientation,
     } = req.body;
 
+    // ✅ Make mutable copy
+    let whatToBring = rawWhatToBring;
+
     // Handle stringified fields from multipart form
     if (typeof whatToBring === 'string') {
       try {
         whatToBring = JSON.parse(whatToBring);
       } catch (e) {
-        whatToBring = whatToBring.split(',').map(item => item.trim());
+        whatToBring = whatToBring
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
       }
     }
 
     // Handle file upload
-    let imageurl = req.body.imageurl;
+    let imageurl = req.body.imageurl || null;
+
     if (req.file) {
       imageurl = req.file.path;
     }
@@ -219,7 +436,7 @@ const createOpportunity = async (req, res) => {
       physicalRequirements,
       dressCode,
       orientation,
-      status: 'Pending', // Explicitly set to Pending for review
+      status: 'Pending',
     });
 
     res.status(201).json({
@@ -227,16 +444,17 @@ const createOpportunity = async (req, res) => {
       message: 'Event created and submitted for approval.',
       data: opportunity,
     });
+
   } catch (err) {
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages });
     }
+
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-
 /**
  * @desc    Update an existing volunteer opportunity
  * @route   PUT /api/opportunities/:id
@@ -374,34 +592,52 @@ const updateOpportunity = async (req, res) => {
  * @route   GET /api/opportunities/partner
  * @access  Private (partner)
  */
+ 
+
 const getMyOpportunities = async (req, res) => {
   try {
     const partnerId = req.user._id;
-    const { status, category, search } = req.query;
+    console.log('Fetching opportunities for partner ID:', partnerId);
+
+    const { status, search } = req.query;
+
+    // Start with partner filter
     const filter = { partnerId };
 
-    if (status) {
-      filter.status = status;
-    }
-    if (category) {
-      filter.category = category;
-    }
-    if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
+    // ✅ Status filter
+    if (status && status.toLowerCase() !== 'all') {
+      const statusMap = {
+        pending: 'Pending',
+        rejected: 'Rejected',
+        approved: ['Active', 'Confirmed'], // multiple statuses
+      };
+
+      const mappedStatus = statusMap[status.toLowerCase()];
+      if (mappedStatus) {
+        if (Array.isArray(mappedStatus)) {
+          filter.status = { $in: mappedStatus }; // for approved
+        } else {
+          filter.status = mappedStatus; // for single statuses
+        }
+      }
     }
 
-    const opportunities = await Opportunity.find(filter).sort({ createdAt: -1 });
+    // ✅ Search by title (case-insensitive)
+    if (search) {
+      filter.title = { $regex: search, $options: 'i' };
+    }
+
+    const opportunities = await Opportunity.find(filter)
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
       count: opportunities.length,
       data: opportunities,
     });
+
   } catch (err) {
-    console.error(err);
+    console.error('Error fetching partner opportunities:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -409,6 +645,7 @@ const getMyOpportunities = async (req, res) => {
 module.exports = {
   submitProfile,
   getMyProfile,
+  updateProfile,
   getDashboardData,
   createOpportunity,
   updateOpportunity,

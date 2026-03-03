@@ -5,6 +5,7 @@ const upload = require('../middleware/uploadMiddleware');
 const {
   submitProfile,
   getMyProfile,
+  updateProfile,
   getDashboardData,
   createOpportunity,
   updateOpportunity,
@@ -24,6 +25,7 @@ router.use(authorize('partner'));
  *       A partner submits their organization details and agreement confirmations.
  *       This endpoint uses **upsert** logic — re-submitting will update the existing profile.
  *       Profile status starts as `pending` until an admin approves.
+ *       Contact person's name (firstName, lastName, or fullName) is also saved to the User record.
  *     tags: [Partners]
  *     security:
  *       - bearerAuth: []
@@ -36,6 +38,22 @@ router.use(authorize('partner'));
  *             required:
  *               - orgName
  *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Full contact name stored in profile (optional duplicate of User info).
+ *                 example: "Johnathan A. Doe"
+ *               fullName:
+ *                 type: string
+ *                 description: Full name of the contact person. Will be split into firstName and lastName when provided with names.
+ *                 example: "John Smith"
+ *               firstName:
+ *                 type: string
+ *                 description: First name of the contact person
+ *                 example: John
+ *               lastName:
+ *                 type: string
+ *                 description: Last name of the contact person
+ *                 example: Smith
  *               orgName:
  *                 type: string
  *                 example: Acme Community Foundation
@@ -75,8 +93,98 @@ router.post('/profile', upload.single('organizationLogo'), submitProfile);
  *   get:
  *     summary: Get logged-in partner's own profile
  *     tags: [Partners]
+ *     responses:
+ *       200:
+ *         description: Partner profile with event statistics (includes contact fullName)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     profile:
+ *                       type: object
+ *                       properties:
+ *                         contactName: { type: string, example: "Johnathan A. Doe" }
+ *                         // original PartnerProfile fields
+ *                         userId:
+ *                           type: object
+ *                           properties:
+ *                             firstName: { type: string }
+ *                             lastName: { type: string }
+ *                             fullName: { type: string }
+ *                             email: { type: string }
+ *                       $ref: '#/components/schemas/PartnerProfile'
+ *                     stats:
+ *                       type: object
+ *                       properties:
+ *                         totalEvents: { type: integer, example: 5 }
+ *                         pendingEvents: { type: integer, example: 2 }
+ *                         totalVolunteers: { type: integer, example: 34 }
+ *   patch:
+ *     summary: Update logged-in partner's profile
+ *     description: Update partner organization profile information and contact person's name. All fields are optional - only provided fields will be updated.
+ *     tags: [Partners]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 description: Full name of the contact person (e.g. "John Smith"). Will be split into firstName and lastName.
+ *                 example: "John Smith"
+ *               firstName:
+ *                 type: string
+ *                 description: First name of the contact person
+ *                 example: John
+ *               lastName:
+ *                 type: string
+ *                 description: Last name of the contact person
+ *                 example: Smith
+ *               orgName:
+ *                 type: string
+ *                 example: Acme Community Foundation
+ *               orgType:
+ *                 type: string
+ *                 example: Non-Profit Organization
+ *               address:
+ *                 type: string
+ *                 example: 123 Main St, Karachi, Pakistan
+ *               website:
+ *                 type: string
+ *                 example: 'https://acme.org'
+ *               organizationLogo:
+ *                 type: string
+ *                 format: binary
+ *               intendedRoles:
+ *                 type: string
+ *                 description: JSON string or comma-separated roles.
+ *               agreements:
+ *                 type: string
+ *                 description: JSON string of agreements object.
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/PartnerProfile' }
+ *       404:
+ *         description: Partner profile not found.
  */
 router.get('/my-profile', getMyProfile);
+router.patch('/my-profile', upload.single('organizationLogo'), updateProfile);
 
 /**
  * @swagger
@@ -172,6 +280,6 @@ router.get('/opportunities/partner', getMyOpportunities);
  *               flyer: { type: string, format: binary }
  *               # ... other fields
  */
-router.patch('/opportunities/:id', upload.single('flyer'), updateOpportunity);
+router.patch('/opportunities/:id', upload.single('imageurl'), updateOpportunity);
 
 module.exports = router;

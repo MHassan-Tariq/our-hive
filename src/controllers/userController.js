@@ -105,6 +105,8 @@ exports.getSettings = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user._id).select('+preferences');
   let displayName = `${user.firstName} ${user.lastName}`;
   let subHeader = 'Account Settings';
+  // compute full name for consistency
+  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
   // Role-specific data for the UI
   if (user.role === 'sponsor') {
@@ -125,6 +127,7 @@ exports.getSettings = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       displayName,
+      fullName,
       subHeader,
       email: user.email,
       phone: user.phone,
@@ -168,8 +171,15 @@ exports.updateSettings = asyncHandler(async (req, res, next) => {
  * @access  Private
  */
 exports.updateProfile = asyncHandler(async (req, res, next) => {
-  const { firstName, lastName, phone, mailingAddress } = req.body;
+  let { firstName, lastName, Name, phone, mailingAddress } = req.body;
   const updateData = {};
+
+  // Handle fullName field - split into firstName and lastName
+  if (Name && (!firstName || !lastName)) {
+    const parts = Name.trim().split(' ');
+    if (!firstName) firstName = parts[0] || '';
+    if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+  }
 
   if (firstName) updateData.firstName = firstName;
   if (lastName) updateData.lastName = lastName;
@@ -186,8 +196,12 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
     { new: true, runValidators: true }
   );
 
+  // include fullName in returned document
+  const result = user.toObject();
+  result.fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
   res.status(200).json({
     success: true,
-    data: user,
+    data: result,
   });
 });

@@ -2,6 +2,7 @@ const Opportunity = require('../models/Opportunity');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const ActivityLog = require('../models/ActivityLog');
 const PartnerProfile = require('../models/PartnerProfile');
+const mongoose = require('mongoose'); 
 
 /**
  * @desc    Get all upcoming active opportunities (Events)
@@ -139,51 +140,82 @@ const getMyRegisteredEvents = async (req, res) => {
  * @route   GET /api/opportunities/:id
  * @access  Private
  */
+ 
 const getEventDetails = async (req, res) => {
   try {
-    const opportunity = await Opportunity.findById(req.params.id)
-      .populate('partnerId', 'firstName lastName email profilePictureUrl orgName phone');
+    const { id } = req.params;
+    console.log('Fetching details for event ID:', id);
+
+    // ✅ 1️⃣ Validate ObjectId BEFORE querying
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID',
+      });
+    }
+
+    const opportunity = await Opportunity.findById(id)
+      .populate('partnerId', 'firstName lastName email profilePictureUrl orgName phone role');
 
     if (!opportunity) {
-      return res.status(404).json({ success: false, message: 'Event not found.' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found.' 
+      });
     }
 
     const eventData = opportunity.toObject();
-    
-    // Calculate occupancy
-    eventData.totalAttendees = eventData.attendees ? eventData.attendees.length : 0;
-    eventData.remainingSpots = Math.max(0, (eventData.requiredVolunteers || 0) - eventData.totalAttendees);
-    
-    // Check registration status
-    const userId = req.user._id;
-    eventData.isRegistered = eventData.attendees.some(id => id.toString() === userId.toString());
 
-    // Fetch Partner Details if applicable
-    if (eventData.partnerId && (eventData.partnerId.role === 'partner' || eventData.partnerId.role === 'admin')) {
-      const partnerProfile = await PartnerProfile.findOne({ userId: eventData.partnerId._id });
+    // ✅ 2️⃣ Safe defaults
+    eventData.attendees = eventData.attendees || [];
+
+    // ✅ 3️⃣ Calculate occupancy
+    eventData.totalAttendees = eventData.attendees.length;
+    eventData.remainingSpots = Math.max(
+      0,
+      (eventData.requiredVolunteers || 0) - eventData.totalAttendees
+    );
+
+    // ✅ 4️⃣ Registration status (handle unauthenticated safely)
+    const userId = req.user?._id;
+    eventData.isRegistered = userId
+      ? eventData.attendees.some(id => id.toString() === userId.toString())
+      : false;
+
+    // ✅ 5️⃣ Fetch Partner Profile if needed
+    if (
+      eventData.partnerId &&
+      (eventData.partnerId.role === 'partner' ||
+       eventData.partnerId.role === 'admin')
+    ) {
+      const partnerProfile = await PartnerProfile.findOne({
+        userId: eventData.partnerId._id,
+      });
+
       if (partnerProfile) {
         eventData.organizerName = partnerProfile.orgName;
         eventData.organizerLogo = partnerProfile.organizationLogoUrl;
       }
     }
-    
-    // Fallback for organizerName if still missing
+
+    // ✅ 6️⃣ Fallback organizer name
     if (!eventData.organizerName && eventData.partnerId) {
-      eventData.organizerName = `${eventData.partnerId.firstName} ${eventData.partnerId.lastName}`;
+      eventData.organizerName =
+        `${eventData.partnerId.firstName} ${eventData.partnerId.lastName}`;
     }
-    
+
     eventData.organizerPhone = eventData.partnerId?.phone || '';
 
     res.status(200).json({
       success: true,
       data: eventData,
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-
 /**
  * @desc    Check-in to an event (Record physical arrival)
  * @route   POST /api/opportunities/:id/check-in

@@ -12,6 +12,7 @@ const sendTokenResponse = (user, statusCode, res) => {
 
   res.status(statusCode).json({
     success: true,
+    message: 'Login successful',
     token,
     user: {
       _id: user._id,
@@ -62,7 +63,7 @@ const register = asyncHandler(async (req, res, next) => {
   // Create empty profile based on role
   switch (user.role) {
     case 'volunteer':
-      await VolunteerProfile.create({ 
+      await VolunteerProfile.create({
         userId: user._id,
         fullName: fullName || `${firstName} ${lastName}`,
         phone: phone || user.phone,
@@ -194,18 +195,26 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const partnerRegister = asyncHandler(async (req, res, next) => {
-  const { 
-    firstName, 
-    lastName, 
-    email, 
-    password, 
+  let {
+    firstName,
+    lastName,
+    fullName,
+    email,
+    password,
     phone,
     orgName,
     orgType,
     orgAddress,
     website,
-    intendedRoles 
+    intendedRoles
   } = req.body;
+
+  // Handle fullName field - split into firstName and lastName
+  if (fullName && (!firstName || !lastName)) {
+    const parts = fullName.trim().split(' ');
+    if (!firstName) firstName = parts[0] || '';
+    if (!lastName) lastName = parts.slice(1).join(' ') || 'Partner';
+  }
 
   // Check if email or phone already exists
   const existingEmail = await User.findOne({ email });
@@ -222,6 +231,8 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
 
   // Create User - Partners are NOT approved by default
   const user = await User.create({
+    firstName,
+    lastName,
     email,
     password,
     phone,
@@ -247,7 +258,8 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     message: 'Partner registration submitted successfully. Your account is pending admin approval.',
     user: {
       _id: user._id,
-      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       role: user.role,
       isApproved: user.isApproved
     }
@@ -280,19 +292,19 @@ const login = asyncHandler(async (req, res, next) => {
   }
 
   // Check volunteer or partner approval status
-if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
+  if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
     return res.json({
-        Status: 200,
-        Isapproved: false,
-        role: user.role,
-       
-        success: false,
-        message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
-    });
-}
+      Status: 200,
+      Isapproved: false,
+      role: user.role,
 
-// If the user is approved, send token response
-sendTokenResponse(user, 200, res);
+      success: false,
+      message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
+    });
+  }
+
+  // If the user is approved, send token response
+  sendTokenResponse(user, 200, res);
 });
 
 /**

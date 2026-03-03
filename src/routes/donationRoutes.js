@@ -10,8 +10,36 @@ const {
   getDonorDashboard,
   updateDonorProfile,
   updateDonation,
+  getAllDonations,
 } = require('../controllers/donationController');
 const { protect, authorize } = require('../middleware/auth');
+
+/**
+ * @swagger
+ * /api/donations/all:
+ *   get:
+ *     summary: Get all in-kind donations (Public - no auth required)
+ *     tags: [Donations]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by itemName or description.
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           enum: [Food, Clothing, Furniture, Electronics, Other]
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of all donations.
+ */
+router.get('/all', getAllDonations);
 
 router.use(protect);
 

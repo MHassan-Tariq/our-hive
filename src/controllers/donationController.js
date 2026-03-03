@@ -295,6 +295,47 @@ const updateDonation = asyncHandler(async (req, res, next) => {
   });
 });
 
+/**
+ * @desc    Get all available in-kind donations (public)
+ * @route   GET /api/donations/all
+ * @access  Public
+ */
+const getAllDonations = asyncHandler(async (req, res, next) => {
+  const { search, category, status } = req.query;
+
+  // Start with an empty query
+  let query = {};
+
+  // 🔍 Search by itemName or description (case-insensitive)
+  if (search) {
+    query.$or = [
+      { itemName: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  // 🏷 Filter by category
+  if (category) {
+    query.itemCategory = category;
+  }
+
+  // ✅ Filter by status
+  if (status && status.toLowerCase() !== 'all') {
+    query.status = status;
+  }
+
+  // Fetch donations with donor details and sort newest first
+  const donations = await InKindDonation.find(query)
+    .populate('donorId', 'firstName lastName')
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    count: donations.length,
+    data: donations,
+  });
+});
+
 module.exports = {
   offerItem,
   getMyDonations,
@@ -304,4 +345,5 @@ module.exports = {
   getDonorDashboard,
   updateDonorProfile,
   updateDonation,
+  getAllDonations,
 };

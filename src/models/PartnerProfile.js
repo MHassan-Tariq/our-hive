@@ -8,6 +8,12 @@ const PartnerProfileSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    name: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Name cannot exceed 100 characters'],
+      // stored for convenience; also derived dynamically from User
+    },
     partnerId: {
       type: String,
       unique: true,

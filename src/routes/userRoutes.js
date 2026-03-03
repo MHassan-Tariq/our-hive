@@ -144,7 +144,7 @@ router.patch('/select-role', authorize('visitor'), selectRole);
  * /api/user/profile:
  *   patch:
  *     summary: Update core user profile fields
- *     description: Update firstName, lastName, phone, and mailingAddress.
+ *     description: Update user profile including name, phone, and mailing address. You can provide either fullName (which will be split) or firstName/lastName separately.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -154,8 +154,16 @@ router.patch('/select-role', authorize('visitor'), selectRole);
  *           schema:
  *             type: object
  *             properties:
- *               firstName: { type: string }
- *               lastName: { type: string }
+ *               fullName:
+ *                 type: string
+ *                 description: Full name of the user (e.g. "Jane Doe"). Will be split into firstName and lastName.
+ *                 example: "Jane Doe"
+ *               firstName: 
+ *                 type: string
+ *                 example: "Jane"
+ *               lastName: 
+ *                 type: string
+ *                 example: "Doe"
  *               phone: { type: string }
  *               mailingAddress: { type: string }
  *               profilePicture: { type: string, format: binary }

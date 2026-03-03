@@ -117,18 +117,45 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [firstName, lastName, email, password, orgName]
+ *             required: [email, password, orgName]
  *             properties:
- *               firstName: { type: string, example: "John" }
- *               lastName: { type: string, example: "Smith" }
- *               email: { type: string, format: email, example: "john@springfieldfoodbank.org" }
- *               password: { type: string, minLength: 6, example: "password123" }
- *               phone: { type: string, example: "(555) 123-4567" }
- *               orgName: { type: string, example: "Springfield Food Bank" }
- *               orgType: { type: string, example: "Non-Profit" }
- *               orgAddress: { type: string, example: "742 Evergreen Terrace" }
- *               website: { type: string, example: "https://springfieldfoodbank.org" }
- *               intendedRoles: { type: array, items: { type: string }, example: ["Donating goods", "Hosting meal distributions"] }
+ *               fullName:
+ *                 type: string
+ *                 example: "John Smith"
+ *                 description: Full name of the partner contact. If provided, firstName and lastName will be extracted from this.
+ *               firstName: 
+ *                 type: string
+ *                 example: "John"
+ *               lastName: 
+ *                 type: string
+ *                 example: "Smith"
+ *               email: 
+ *                 type: string
+ *                 format: email
+ *                 example: "john@springfieldfoodbank.org"
+ *               password: 
+ *                 type: string
+ *                 minLength: 6
+ *                 example: "password123"
+ *               phone: 
+ *                 type: string
+ *                 example: "(555) 123-4567"
+ *               orgName: 
+ *                 type: string
+ *                 example: "Springfield Food Bank"
+ *               orgType: 
+ *                 type: string
+ *                 example: "Non-Profit"
+ *               orgAddress: 
+ *                 type: string
+ *                 example: "742 Evergreen Terrace"
+ *               website: 
+ *                 type: string
+ *                 example: "https://springfieldfoodbank.org"
+ *               intendedRoles: 
+ *                 type: array
+ *                 items: { type: string }
+ *                 example: ["Donating goods", "Hosting meal distributions"]
  *     responses:
  *       201:
  *         description: Partner registered and pending approval.

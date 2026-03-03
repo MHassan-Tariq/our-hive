@@ -54,55 +54,7 @@ router.get('/my-registered', getMyRegisteredEvents);
  */
 router.post('/:id/join', joinEvent);
 
-/**
- * @swagger
- * /api/opportunities/{id}:
- *   get:
- *     summary: Get specific event details (Page 6 alignment)
- *     tags: [Opportunities]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Event details including description, location, time, organization data (via partnerId), and whatToBring.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     title: { type: string }
- *                     date: { type: string, format: date-time }
- *                     time: { type: string }
- *                     endTime: { type: string }
- *                     partnerId:
- *                       type: object
- *                       properties:
- *                         firstName: { type: string }
- *                         lastName: { type: string }
- *                         email: { type: string }
- *                         profilePictureUrl: { type: string }
- *                     location: { type: string }
- *                     specificLocation: { type: string }
- *                     coordinates:
- *                       type: object
- *                       properties:
- *                         lat: { type: number, example: 39.7817 }
- *                         lng: { type: number, example: -89.6501 }
- *                     description: { type: string, description: "Corresponds to 'About Event' in UI" }
- *                     whatToBring:
- *                       type: array
- *                       items: { type: string }
- *                       description: "Checklist of items to bring"
- */
-router.get('/:id', getEventDetails);
+
 /**
  * @swagger
  * /api/opportunities:
@@ -433,6 +385,57 @@ router.post(
  *       404:
  *         description: Opportunity not found.
  */
+
+/**
+ * @swagger
+ * /api/opportunities/{id}:
+ *   get:
+ *     summary: Get specific event details (Page 6 alignment)
+ *     tags: [Opportunities]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event details including description, location, time, organization data (via partnerId), and whatToBring.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     title: { type: string }
+ *                     date: { type: string, format: date-time }
+ *                     time: { type: string }
+ *                     endTime: { type: string }
+ *                     partnerId:
+ *                       type: object
+ *                       properties:
+ *                         firstName: { type: string }
+ *                         lastName: { type: string }
+ *                         email: { type: string }
+ *                         profilePictureUrl: { type: string }
+ *                     location: { type: string }
+ *                     specificLocation: { type: string }
+ *                     coordinates:
+ *                       type: object
+ *                       properties:
+ *                         lat: { type: number, example: 39.7817 }
+ *                         lng: { type: number, example: -89.6501 }
+ *                     description: { type: string, description: "Corresponds to 'About Event' in UI" }
+ *                     whatToBring:
+ *                       type: array
+ *                       items: { type: string }
+ *                       description: "Checklist of items to bring"
+ */
+router.get('/:id', getEventDetails);
+
 router.post(
   '/:id/check-in',
   protect,
