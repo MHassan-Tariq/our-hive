@@ -39,7 +39,7 @@ const submitProfile = async (req, res) => {
     if (typeof agreements === 'string') {
       try {
         agreements = JSON.parse(agreements);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Update user profile if name fields are provided
@@ -55,7 +55,7 @@ const submitProfile = async (req, res) => {
       const userUpdateData = {};
       if (firstName) userUpdateData.firstName = firstName;
       if (lastName) userUpdateData.lastName = lastName;
-      
+
       await User.findByIdAndUpdate(
         req.user._id,
         userUpdateData,
@@ -159,6 +159,12 @@ const getMyProfile = async (req, res) => {
     const totalVolunteers =
       (volunteersAgg[0] && volunteersAgg[0].total) || 0;
 
+    // Count total picked up/delivered in-kind donations
+    const totalPickups = await InKindDonation.countDocuments({
+      recipientId: partnerId,
+      status: { $in: ['PickedUp', 'Delivered'] }
+    });
+
     // Respond with profile and stats
     res.status(200).json({
       success: true,
@@ -168,6 +174,7 @@ const getMyProfile = async (req, res) => {
           totalEvents,
           pendingEvents,
           totalVolunteers,
+          totalPickups,
         },
       },
     });
@@ -209,7 +216,7 @@ const updateProfile = async (req, res) => {
     const updateData = {};
     if (name || fullName) {
       updateData.name = name || fullName;
-    }    if (orgName !== undefined) updateData.orgName = orgName;
+    } if (orgName !== undefined) updateData.orgName = orgName;
     if (orgType !== undefined) updateData.orgType = orgType;
     // support both address fields for compatibility
     if (orgAddress !== undefined) updateData.address = orgAddress;
@@ -254,7 +261,7 @@ const updateProfile = async (req, res) => {
       const userUpdateData = {};
       if (firstName) userUpdateData.firstName = firstName;
       if (lastName) userUpdateData.lastName = lastName;
-      
+
       await User.findByIdAndUpdate(
         req.user._id,
         userUpdateData,
@@ -279,9 +286,9 @@ const updateProfile = async (req, res) => {
     }
 
     // populate user info and compute fullName for response
-    updatedProfile = await PartnerProfile.findById(updatedProfile._id).populate('userId','firstName lastName email');
+    updatedProfile = await PartnerProfile.findById(updatedProfile._id).populate('userId', 'firstName lastName email');
     if (updatedProfile.userId) {
-      const { firstName='', lastName='' } = updatedProfile.userId;
+      const { firstName = '', lastName = '' } = updatedProfile.userId;
       updatedProfile.userId.fullName = `${firstName} ${lastName}`.trim();
     }
 
@@ -336,6 +343,12 @@ const getDashboardData = async (req, res) => {
     // 4. Get User Profile (for greeting firstName)
     const user = await User.findById(partnerId).select('firstName lastName email');
 
+    // 5. Get Total Pickups count
+    const totalPickups = await InKindDonation.countDocuments({
+      recipientId: partnerId,
+      status: { $in: ['PickedUp', 'Delivered'] }
+    });
+
     res.status(200).json({
       success: true,
       data: {
@@ -345,6 +358,7 @@ const getDashboardData = async (req, res) => {
         pendingPickups,
         counts: {
           pendingPickups: pendingPickups.length,
+          totalPickups,
         },
       },
     });
@@ -592,7 +606,7 @@ const updateOpportunity = async (req, res) => {
  * @route   GET /api/opportunities/partner
  * @access  Private (partner)
  */
- 
+
 
 const getMyOpportunities = async (req, res) => {
   try {

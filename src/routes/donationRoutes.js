@@ -11,6 +11,8 @@ const {
   updateDonorProfile,
   updateDonation,
   getAllDonations,
+  getInKindDonationById,
+  ChangeDonationStatus
 } = require('../controllers/donationController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -41,7 +43,72 @@ const { protect, authorize } = require('../middleware/auth');
  */
 router.get('/all', getAllDonations);
 
+/**
+ * @swagger
+ * /api/donations/{id}:
+ *   get:
+ *     summary: Get a specific in-kind donation by ID
+ *     tags: [Donations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The donation ID
+ *     responses:
+ *       200:
+ *         description: Donation details retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Donation not found.
+ */
+router.get('/:id', getInKindDonationById);
+
+
+/**
+ * @swagger
+ * /api/donations/status/{donationId}:
+ *   patch:
+ *     summary: Change donation status and update photo
+ *     tags: [Donations]
+ *     parameters:
+ *       - in: path
+ *         name: donationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The donation ID
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: 
+ *                 type: string
+ *                 enum: [Available, Claimed, PickedUp]
+ *               image: 
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Donation status updated successfully.
+ *       400:
+ *         description: Invalid status or transition.
+ *       404:
+ *         description: Donation not found.
+ */
 router.use(protect);
+
+router.patch("/status/:donationId", upload.single('image'), ChangeDonationStatus);
 
 /**
  * @swagger
@@ -107,12 +174,12 @@ router.patch('/profile', authorize('donor'), updateDonorProfile);
  *               petInfo:
  *                 type: string
  *                 description: JSON string of pet info object {hasCat, hasDog}.
- *               itemPhoto: { type: string, format: binary }
+ *               image: { type: string, format: binary }
  *               pickupAddress:
  *                 type: string
  *                 description: JSON string of address object {street, city, zip}.
  */
-router.post('/', authorize('donor'), upload.single('itemPhoto'), offerItem);
+router.post('/', authorize('donor'), upload.single('image'), offerItem);
 
 /**
  * @swagger
@@ -137,12 +204,12 @@ router.post('/', authorize('donor'), upload.single('itemPhoto'), offerItem);
  *               itemCategory: { type: string }
  *               description: { type: string }
  *               quantity: { type: string }
- *               itemPhoto: { type: string, format: binary }
+ *               image: { type: string, format: binary }
  *     responses:
  *       200:
  *         description: Donation updated.
  */
-router.patch('/:id', authorize('donor'), upload.single('itemPhoto'), updateDonation);
+router.patch('/:id', authorize('donor'), upload.single('image'), updateDonation);
 
 /**
  * @swagger

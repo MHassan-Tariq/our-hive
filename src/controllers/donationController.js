@@ -12,7 +12,7 @@ const asyncHandler = require('../utils/asyncHandler');
  */
 const getDonorDashboard = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user._id);
-  
+
   // 1. Get Donations Made count
   const donationsCount = await InKindDonation.countDocuments({ donorId: req.user._id });
 
@@ -51,12 +51,12 @@ const getDonorDashboard = asyncHandler(async (req, res, next) => {
  * @access  Private (donor)
  */
 const offerItem = asyncHandler(async (req, res, next) => {
-  let { 
-    itemName, 
-    itemCategory, 
-    description, 
-    itemPhotoUrl, 
-    pickupAddress, 
+  let {
+    itemName,
+    itemCategory,
+    description,
+    image,
+    pickupAddress,
     quantity,
     estimatedValue,
     deliveryMethod,
@@ -66,19 +66,19 @@ const offerItem = asyncHandler(async (req, res, next) => {
 
   // Handle file upload
   if (req.file) {
-    itemPhotoUrl = req.file.path;
+    image = req.file.path;
   }
 
   // Handle stringified objects from multipart/form-data
   if (typeof pickupAddress === 'string') {
     try {
       pickupAddress = JSON.parse(pickupAddress);
-    } catch (e) {}
+    } catch (e) { }
   }
   if (typeof petInfo === 'string') {
     try {
       petInfo = JSON.parse(petInfo);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const donation = await InKindDonation.create({
@@ -86,7 +86,7 @@ const offerItem = asyncHandler(async (req, res, next) => {
     itemName,
     itemCategory,
     description,
-    itemPhotoUrl,
+    image,
     pickupAddress,
     quantity,
     estimatedValue,
@@ -221,7 +221,7 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
  */
 const updateDonorProfile = asyncHandler(async (req, res, next) => {
   const { monthlyGoal } = req.body;
-  
+
   const donorProfile = await DonorProfile.findOneAndUpdate(
     { userId: req.user._id },
     { $set: { monthlyGoal } },
@@ -241,11 +241,11 @@ const updateDonorProfile = asyncHandler(async (req, res, next) => {
  */
 const updateDonation = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
-  let { 
-    itemName, 
-    itemCategory, 
-    description, 
-    pickupAddress, 
+  let {
+    itemName,
+    itemCategory,
+    description,
+    pickupAddress,
     quantity,
     estimatedValue,
     deliveryMethod,
@@ -265,15 +265,15 @@ const updateDonation = asyncHandler(async (req, res, next) => {
 
   // Handle file upload
   if (req.file) {
-    donation.itemPhotoUrl = req.file.path;
+    donation.image = req.file.path;
   }
 
   // Handle stringified objects from multipart/form-data
   if (typeof pickupAddress === 'string') {
-    try { pickupAddress = JSON.parse(pickupAddress); } catch (e) {}
+    try { pickupAddress = JSON.parse(pickupAddress); } catch (e) { }
   }
   if (typeof petInfo === 'string') {
-    try { petInfo = JSON.parse(petInfo); } catch (e) {}
+    try { petInfo = JSON.parse(petInfo); } catch (e) { }
   }
 
   donation.itemName = itemName || donation.itemName;
@@ -302,11 +302,10 @@ const updateDonation = asyncHandler(async (req, res, next) => {
  */
 const getAllDonations = asyncHandler(async (req, res, next) => {
   const { search, category, status } = req.query;
+  console.log(search, 'search', status, 'status', category, 'category');
 
-  // Start with an empty query
   let query = {};
 
-  // 🔍 Search by itemName or description (case-insensitive)
   if (search) {
     query.$or = [
       { itemName: { $regex: search, $options: 'i' } },
@@ -319,20 +318,97 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     query.itemCategory = category;
   }
 
-  // ✅ Filter by status
+  // ✅ Filter by status (case-insensitive)
   if (status && status.toLowerCase() !== 'all') {
-    query.status = status;
+    query.status = { $regex: `^${status}$`, $options: 'i' }; // exact match, ignore case
   }
 
-  // Fetch donations with donor details and sort newest first
+  // Fetch donations with donor and recipient details and sort newest first
   const donations = await InKindDonation.find(query)
-    .populate('donorId', 'firstName lastName')
+    .populate('donorId', 'firstName lastName email')
+    .populate('recipientId', 'firstName lastName email')
     .sort({ createdAt: -1 });
 
   res.status(200).json({
     success: true,
     count: donations.length,
     data: donations,
+  });
+});
+
+
+const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
+  const { donationId } = req.params;
+  let { status } = req.body;
+  if (status && typeof status === 'string') {
+    status = status.replace(/^["'](.+)["']$/, '$1');
+  }
+  const allowedStatuses = ["Available", "Claimed", "PickedUp", "Delivered", "Approved", "All"];
+
+  if (!status || !allowedStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid status value: ${status}`,
+    });
+  }
+  const donation = await InKindDonation.findById(donationId);
+  if (!donation) {
+    return res.status(404).json({
+      success: false,
+      message: "Donation not found",
+    });
+  }
+  const validTransitions = {
+    pending: ["Available", "Claimed"],
+    Available: ["Claimed"],
+    Claimed: ["PickedUp"],
+    Delivered: ["Delivered"],
+    PickedUp: [],
+  };
+
+  // if (validTransitions[donation.status] && !validTransitions[donation.status].includes(status)) {
+  //   return res.status(400).json({
+  //     success: false,
+  //     message: `Cannot change status from ${donation.status} to ${status}`,
+  //   });
+  // }
+  if (req.file) {
+    donation.image = req.file.path;
+  }
+
+  // Assign donation to the partner who is picking it up or delivering it
+  if (['PickedUp', 'Delivered', 'Claimed'].includes(status) && req.user) {
+    donation.recipientId = req.user._id;
+  }
+
+  donation.status = status;
+  await donation.save();
+  res.status(200).json({
+    success: true,
+    message: "Donation status updated successfully",
+    data: donation,
+  });
+});
+/**
+ * @desc    Get a specific in-kind donation by ID
+ * @route   GET /api/donations/:id
+ * @access  Public
+ */
+const getInKindDonationById = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  const donation = await InKindDonation.findById(id)
+    .populate('donorId', 'firstName lastName email')
+    .populate('assignedVolunteerId', 'firstName lastName email phone')
+    .populate('recipientId', 'firstName lastName email');
+
+  if (!donation) {
+    return next(new ErrorResponse('In-kind donation not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: donation,
   });
 });
 
@@ -346,4 +422,6 @@ module.exports = {
   updateDonorProfile,
   updateDonation,
   getAllDonations,
+  getInKindDonationById,
+  ChangeDonationStatus
 };

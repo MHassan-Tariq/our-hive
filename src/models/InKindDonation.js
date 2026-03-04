@@ -35,7 +35,7 @@ const InKindDonationSchema = new mongoose.Schema(
       trim: true,
       maxlength: [50, 'Quantity description cannot be more than 50 characters'],
     },
-    itemPhotoUrl: {
+    image: {
       type: String,
       trim: true,
     },
@@ -75,8 +75,8 @@ const InKindDonationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'scheduled', 'completed', 'rejected'],
-      default: 'pending',
+      enum: ["pending", "approved", "scheduled", "completed", "rejected", "claimed", "pickedUp", "Available", "Claimed", "PickedUp","Delivered"],
+      default: "pending",
     },
     rejectionReason: {
       type: String,
@@ -105,7 +105,7 @@ const InKindDonationSchema = new mongoose.Schema(
 );
 
 // Pre-save hook to generate refId like OH-XXXX
-InKindDonationSchema.pre('save', async function() {
+InKindDonationSchema.pre('save', async function () {
   if (!this.refId) {
     const random = Math.floor(1000 + Math.random() * 9000);
     this.refId = `OH-${random}`;
