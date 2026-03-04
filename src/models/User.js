@@ -48,10 +48,10 @@ const UserSchema = new mongoose.Schema(
       trim: true,
       unique: true,
       sparse: true, // Allow multiple users with no phone (null/undefined)
-      match: [
-        /^[+]?[(]?[0-9]{3}[)]?[-s.]?[0-9]{3}[-s.]?[0-9]{4,6}$/,
-        'Please provide a valid phone number',
-      ],
+      // match: [
+      //   /^[+]?[(]?[0-9]{3}[)]?[-s.]?[0-9]{3}[-s.]?[0-9]{4,6}$/,
+      //   'Please provide a valid phone number',
+      // ],
     },
     role: {
       type: String,

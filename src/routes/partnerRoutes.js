@@ -109,7 +109,7 @@ router.post('/profile', upload.single('organizationLogo'), submitProfile);
  *                       type: object
  *                       properties:
  *                         contactName: { type: string, example: "Johnathan A. Doe" }
- *                         // original PartnerProfile fields
+ * 
  *                         userId:
  *                           type: object
  *                           properties:
