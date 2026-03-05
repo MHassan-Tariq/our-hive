@@ -161,6 +161,7 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *               category: { type: string }
  *               requiredVolunteers: { type: integer }
  *               imageurl: { type: string }
+ *               whatToBring: { type: array, items: { type: string }, example: ["Water bottle", "Gloves"] }
  *               status: { type: string, enum: [Draft, Confirmed, Pending] }
  *     responses:
  *       201:
@@ -249,6 +250,7 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *                   properties:
  *                     time: { type: string }
  *                     endTime: { type: string }
+ *                     whatToBring: { type: array, items: { type: string } }
  */
 
 /**
@@ -871,6 +873,13 @@ _Requires `Bearer <token>` and `partner` role._
  *   post:
  *     summary: Create a new volunteer opportunity/event
  *     tags: [Opportunities]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               whatToBring: { type: array, items: { type: string } }
  */
 
 /**

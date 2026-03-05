@@ -79,7 +79,7 @@ exports.getOpportunities = async (req, res) => {
     }
 
     const opportunitiesRaw = await Opportunity.find(query)
-      .select('title description location date category requiredVolunteers imageurl time endTime partnerId')
+      .select('title description location date category requiredVolunteers imageurl time endTime partnerId whatToBring')
       .sort({ createdAt: -1 });
 
     // Enrich with PartnerProfile data
@@ -155,7 +155,7 @@ exports.getDistributionSchedule = async (req, res) => {
     };
 
     const slots = await Opportunity.find(query)
-      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers')
+      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring')
       .sort({ date: 1, time: 1 });
 
     // Pre-fetch all partner profiles to avoid N+1 issues in the map below
