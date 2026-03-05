@@ -1004,6 +1004,21 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
       opportunityData.partnerId = opportunityData.partnerId._id || req.user.id;
   }
 
+  // Normalize whatToBring to an array
+  if (opportunityData.whatToBring) {
+    if (typeof opportunityData.whatToBring === 'string') {
+      try {
+        opportunityData.whatToBring = JSON.parse(opportunityData.whatToBring);
+      } catch (e) {
+        opportunityData.whatToBring = opportunityData.whatToBring.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    } else if (!Array.isArray(opportunityData.whatToBring)) {
+      opportunityData.whatToBring = [opportunityData.whatToBring];
+    }
+  } else {
+    opportunityData.whatToBring = [];
+  }
+
   if (req.file) {
     opportunityData.imageurl = req.file.path || req.file.secure_url || req.file.url;
   }
@@ -1061,6 +1076,22 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
 
   if (req.file) {
     updates.imageurl = req.file.path || req.file.secure_url || req.file.url;
+  }
+  
+  // Normalize whatToBring to an array
+  if (updates.whatToBring) {
+    if (typeof updates.whatToBring === 'string') {
+      try {
+        updates.whatToBring = JSON.parse(updates.whatToBring);
+      } catch (e) {
+        updates.whatToBring = updates.whatToBring.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    } else if (!Array.isArray(updates.whatToBring)) {
+      updates.whatToBring = [updates.whatToBring];
+    }
+  } else if (req.body.whatToBring === '') {
+     // If explicitly sent as empty string, clear the array
+     updates.whatToBring = [];
   }
   
   const opportunity = await Opportunity.findByIdAndUpdate(

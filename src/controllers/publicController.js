@@ -164,7 +164,7 @@ exports.getDistributionSchedule = async (req, res) => {
 
     const slots = await Opportunity.find(query)
       .select(
-        'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers'
+        'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring'
       )
       .sort({ date: 1, time: 1 });
 
