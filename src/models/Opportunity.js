@@ -36,6 +36,12 @@ const OpportunitySchema = new mongoose.Schema(
         trim: true,
       },
     ],
+    requirements: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     date: {
       type: Date,
     },

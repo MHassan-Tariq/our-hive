@@ -1012,11 +1012,46 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
       } catch (e) {
         opportunityData.whatToBring = opportunityData.whatToBring.split(',').map(item => item.trim()).filter(Boolean);
       }
-    } else if (!Array.isArray(opportunityData.whatToBring)) {
+    }
+    
+    // Ensure it's an array and flatten any internal comma-separated strings
+    if (Array.isArray(opportunityData.whatToBring)) {
+      opportunityData.whatToBring = opportunityData.whatToBring.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    } else {
       opportunityData.whatToBring = [opportunityData.whatToBring];
     }
   } else {
     opportunityData.whatToBring = [];
+  }
+
+  // Normalize requirements to an array
+  if (opportunityData.requirements) {
+    if (typeof opportunityData.requirements === 'string') {
+      try {
+        opportunityData.requirements = JSON.parse(opportunityData.requirements);
+      } catch (e) {
+        opportunityData.requirements = opportunityData.requirements.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    }
+    
+    // Ensure it's an array and flatten any internal comma-separated strings
+    if (Array.isArray(opportunityData.requirements)) {
+      opportunityData.requirements = opportunityData.requirements.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    } else {
+      opportunityData.requirements = [opportunityData.requirements];
+    }
+  } else {
+    opportunityData.requirements = [];
   }
 
   if (req.file) {
@@ -1086,12 +1121,46 @@ const adminUpdateOpportunity = asyncHandler(async (req, res, next) => {
       } catch (e) {
         updates.whatToBring = updates.whatToBring.split(',').map(item => item.trim()).filter(Boolean);
       }
-    } else if (!Array.isArray(updates.whatToBring)) {
+    }
+    // Ensure it's an array and flatten any internal comma-separated strings
+    if (Array.isArray(updates.whatToBring)) {
+      updates.whatToBring = updates.whatToBring.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    } else {
       updates.whatToBring = [updates.whatToBring];
     }
   } else if (req.body.whatToBring === '') {
      // If explicitly sent as empty string, clear the array
      updates.whatToBring = [];
+  }
+
+  // Normalize requirements to an array
+  if (updates.requirements) {
+    if (typeof updates.requirements === 'string') {
+      try {
+        updates.requirements = JSON.parse(updates.requirements);
+      } catch (e) {
+        updates.requirements = updates.requirements.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    }
+    // Ensure it's an array and flatten any internal comma-separated strings
+    if (Array.isArray(updates.requirements)) {
+      updates.requirements = updates.requirements.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    } else {
+      updates.requirements = [updates.requirements];
+    }
+  } else if (req.body.requirements === '') {
+     // If explicitly sent as empty string, clear the array
+     updates.requirements = [];
   }
   
   const opportunity = await Opportunity.findByIdAndUpdate(

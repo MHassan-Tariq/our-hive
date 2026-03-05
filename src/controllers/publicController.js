@@ -79,7 +79,7 @@ exports.getOpportunities = async (req, res) => {
     }
 
     const opportunitiesRaw = await Opportunity.find(query)
-      .select('title description location date category requiredVolunteers imageurl time endTime partnerId whatToBring')
+      .select('title description location date category requiredVolunteers imageurl time endTime partnerId whatToBring requirements')
       .sort({ createdAt: -1 });
 
     // Enrich with PartnerProfile data
@@ -164,7 +164,7 @@ exports.getDistributionSchedule = async (req, res) => {
 
     const slots = await Opportunity.find(query)
       .select(
-        'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring'
+        'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring requirements'
       )
       .sort({ date: 1, time: 1 });
 

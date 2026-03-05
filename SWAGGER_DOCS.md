@@ -162,6 +162,7 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *               requiredVolunteers: { type: integer }
  *               imageurl: { type: string }
  *               whatToBring: { type: array, items: { type: string }, example: ["Water bottle", "Gloves"] }
+ *               requirements: { type: array, items: { type: string }, example: ["Must be 18+", "Background check required"] }
  *               status: { type: string, enum: [Draft, Confirmed, Pending] }
  *     responses:
  *       201:
@@ -251,6 +252,7 @@ Below is the complete Swagger API documentation for the entire "Our Hive" applic
  *                     time: { type: string }
  *                     endTime: { type: string }
  *                     whatToBring: { type: array, items: { type: string } }
+ *                     requirements: { type: array, items: { type: string } }
  */
 
 /**

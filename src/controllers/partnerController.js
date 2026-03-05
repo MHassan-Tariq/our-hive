@@ -398,6 +398,7 @@ const createOpportunity = async (req, res) => {
       location,
       specificLocation,
       whatToBring: rawWhatToBring,
+      requirements: rawRequirements,
       date,
       time,
       endTime,
@@ -410,24 +411,43 @@ const createOpportunity = async (req, res) => {
       orientation,
     } = req.body;
 
-    // ✅ Make mutable copy
+    // Normalize arrays
     let whatToBring = rawWhatToBring;
-
-    // Handle stringified fields from multipart form
     if (typeof whatToBring === 'string') {
       try {
         whatToBring = JSON.parse(whatToBring);
       } catch (e) {
-        whatToBring = whatToBring
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean);
+        whatToBring = whatToBring.split(',').map(item => item.trim()).filter(Boolean);
       }
+    }
+    if (Array.isArray(whatToBring)) {
+      whatToBring = whatToBring.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    }
+
+    let requirements = rawRequirements;
+    if (typeof requirements === 'string') {
+      try {
+        requirements = JSON.parse(requirements);
+      } catch (e) {
+        requirements = requirements.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    }
+    if (Array.isArray(requirements)) {
+      requirements = requirements.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
     }
 
     // Handle file upload
     let imageurl = req.body.imageurl || null;
-
     if (req.file) {
       imageurl = req.file.path;
     }
@@ -439,6 +459,7 @@ const createOpportunity = async (req, res) => {
       location,
       specificLocation,
       whatToBring,
+      requirements,
       date,
       time,
       endTime,
@@ -504,6 +525,7 @@ const updateOpportunity = async (req, res) => {
       orientation,
       specificLocation,
       whatToBring,
+      requirements,
     } = req.body;
 
     // Handle stringified fields from multipart form
@@ -514,6 +536,31 @@ const updateOpportunity = async (req, res) => {
       } catch (e) {
         parsedWhatToBring = whatToBring.split(',').map(item => item.trim());
       }
+    }
+    if (Array.isArray(parsedWhatToBring)) {
+      parsedWhatToBring = parsedWhatToBring.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
+    }
+
+    let parsedRequirements = requirements;
+    if (typeof requirements === 'string') {
+      try {
+        parsedRequirements = JSON.parse(requirements);
+      } catch (e) {
+        parsedRequirements = requirements.split(',').map(item => item.trim()).filter(Boolean);
+      }
+    }
+    if (Array.isArray(parsedRequirements)) {
+      parsedRequirements = parsedRequirements.reduce((acc, curr) => {
+        if (typeof curr === 'string') {
+          return acc.concat(curr.split(',').map(item => item.trim()).filter(Boolean));
+        }
+        return acc.concat(curr);
+      }, []);
     }
 
     // Handle file upload
@@ -529,6 +576,7 @@ const updateOpportunity = async (req, res) => {
       'location',
       'specificLocation',
       'whatToBring',
+      'requirements',
       'date',
       'time',
       'endTime',
@@ -551,6 +599,8 @@ const updateOpportunity = async (req, res) => {
         newValue = imageurl;
       } else if (field === 'whatToBring') {
         newValue = parsedWhatToBring;
+      } else if (field === 'requirements') {
+        newValue = parsedRequirements;
       } else {
         newValue = req.body[field];
       }
@@ -566,6 +616,7 @@ const updateOpportunity = async (req, res) => {
     opportunity.location = location || opportunity.location;
     opportunity.specificLocation = specificLocation || opportunity.specificLocation;
     opportunity.whatToBring = parsedWhatToBring || opportunity.whatToBring;
+    opportunity.requirements = parsedRequirements || opportunity.requirements;
     opportunity.date = date || opportunity.date;
     opportunity.time = time || opportunity.time;
     opportunity.endTime = endTime || opportunity.endTime;
