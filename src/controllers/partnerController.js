@@ -385,7 +385,7 @@ const createOpportunity = async (req, res) => {
       });
     }
 
-    if (profile.status !== 'approved') {
+    if (profile.status !== 'Active') {
       return res.status(403).json({
         success: false,
         message: 'Your organization is still pending admin approval.',
@@ -508,7 +508,6 @@ const updateOpportunity = async (req, res) => {
         message: 'Opportunity not found or you do not own this opportunity.',
       });
     }
-
     const {
       title,
       description,

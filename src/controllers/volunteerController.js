@@ -2,6 +2,7 @@ const VolunteerProfile = require('../models/VolunteerProfile');
 const Opportunity = require('../models/Opportunity');
 const ActivityLog = require('../models/ActivityLog');
 const VolunteerLog = require('../models/VolunteerLog');
+const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 
 /**
@@ -190,82 +191,216 @@ const getMyTasks = async (req, res) => {
 };
 
 /**
- * @desc    Log volunteer hours
- * @route   POST /api/volunteer/log-hours
+ * @desc    Get all opportunities the volunteer has claimed with logged hours
+ * @route   GET /api/volunteer/claimed-opportunities
  * @access  Private (volunteer)
  */
-const logHours = async (req, res) => {
+const getClaimedOpportunities = async (req, res) => {
   try {
-    const { date, startTime, endTime, category, notes, hours: manualHours } = req.body;
+    // Get all volunteer logs for this user organized by opportunity
+    const logs = await VolunteerLog.find({ userId: req.user._id })
+      .populate({
+        path: 'opportunityId',
+        select: 'title description location date time endTime category requiredVolunteers status partnerId attendees',
+        populate: {
+          path: 'partnerId',
+          select: 'firstName lastName email orgName',
+        },
+      })
+      .sort({ date: -1 });
 
-    let totalHours = manualHours;
+    // Get the volunteer profile to also include joined opportunities without logs
+    const profile = await VolunteerProfile.findOne({
+      userId: req.user._id,
+    }).populate({
+      path: 'joinedOpportunities',
+      select: 'title description location date time endTime category requiredVolunteers status partnerId attendees',
+      populate: {
+        path: 'partnerId',
+        select: 'firstName lastName email orgName',
+      },
+    });
 
-    // If start/end times provided, calculate duration (simple version)
-    if (!totalHours && startTime && endTime) {
-      const start = new Date(`2000-01-01 ${startTime}`);
-      const end = new Date(`2000-01-01 ${endTime}`);
-      totalHours = (end - start) / (1000 * 60 * 60);
-      if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
-    }
+    // Build a map of opportunities with their logged hours
+    const opportunityMap = new Map();
 
-    if (!totalHours || totalHours <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide valid hours or start/end times.',
+    // Add all logs to map
+    logs.forEach((log) => {
+      if (log.opportunityId) {
+        const oppId = log.opportunityId._id.toString();
+        if (!opportunityMap.has(oppId)) {
+          opportunityMap.set(oppId, {
+            ...log.opportunityId.toObject(),
+            isLogged: true,
+            logs: [],
+          });
+        }
+        opportunityMap.get(oppId).logs.push({
+          date: log.date,
+          startTime: log.startTime,
+          endTime: log.endTime,
+          category: log.category,
+          notes: log.notes,
+          hoursLogged: log.hoursLogged,
+          createdAt: log.createdAt,
+        });
+      }
+    });
+
+    // Add joined opportunities not yet logged
+    if (profile && profile.joinedOpportunities) {
+      profile.joinedOpportunities.forEach((opp) => {
+        const oppId = opp._id.toString();
+        if (!opportunityMap.has(oppId)) {
+          opportunityMap.set(oppId, {
+            ...opp.toObject(),
+            isLogged: false,
+            logs: [],
+          });
+        }
       });
     }
 
-    // 1. Create the structured log
-    await VolunteerLog.create({
-      userId: req.user._id,
-      date: date || new Date(),
-      startTime,
-      endTime,
-      category,
-      notes,
-      hoursLogged: totalHours,
-    });
-
-    // 2. Update the profile totals
-    let profile = await VolunteerProfile.findOne({ userId: req.user._id });
-    if (!profile) {
-      profile = new VolunteerProfile({ userId: req.user._id });
-    }
-
-    profile.totalHours += totalHours;
-    profile.hoursThisYear += totalHours;
-
-    // Award badges
-    if (profile.totalHours >= 15) {
-      const hasBadge = profile.badges.some((b) => b.name === 'Master of Design');
-      if (!hasBadge) {
-        profile.badges.push({
-          name: 'Master of Design',
-          level: 'Expert Level',
-          badgeId: `#BDG-${Math.floor(1000 + Math.random() * 9000)}`,
-          hoursRequired: 15,
-          earnedAt: new Date(),
-        });
-        profile.nextBadgeGoal = 25;
-      }
-    }
-
-    await profile.save();
+    const claimedOpportunities = Array.from(opportunityMap.values());
 
     res.status(200).json({
       success: true,
-      message: 'Hours logged successfully.',
-      data: {
-        totalHours: profile.totalHours,
-        hoursThisYear: profile.hoursThisYear,
-        logged: totalHours
-      },
+      count: claimedOpportunities.length,
+      data: claimedOpportunities,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+/**
+ * @desc    Log volunteer hours
+ * @route   POST /api/volunteer/log-hours
+ * @access  Private (volunteer)
+ */
+  const logHours = async (req, res) => {
+    try {
+      // allow opportunity ID from either route param or body
+      const opportunityId = req.params.id || req.body.opportunityId;
+const { date, startTime, endTime, category: incomingCategory, notes, hours: manualHours } = req.body;
+const category = incomingCategory || 'General Volunteering';
+      // if opportunityId is present, validate it and ensure user participated
+      let opportunity;
+      if (opportunityId) {
+        if (!mongoose.Types.ObjectId.isValid(opportunityId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid opportunity ID',
+          });
+        }
+        opportunity = await Opportunity.findById(opportunityId);
+        if (!opportunity) {
+          return res.status(404).json({
+            success: false,
+            message: 'Opportunity not found',
+          });
+        }
+        const userIdStr = req.user._id.toString();
+        const isAttendee = (opportunity.attendees || [])
+          .some((id) => id.toString() === userIdStr) ||
+          (opportunity.checkedInUsers || [])
+          .some((id) => id.toString() === userIdStr);
+        if (!isAttendee) {
+          return res.status(403).json({
+            success: false,
+            message: 'You must join or check-in before logging hours for this opportunity.',
+          });
+        }
+      }
+
+      let totalHours = manualHours;
+      // If start/end times provided, calculate duration (simple version)
+      if (!totalHours && startTime && endTime) {
+        const start = new Date(`2000-01-01 ${startTime}`);
+        const end = new Date(`2000-01-01 ${endTime}`);
+        totalHours = (end - start) / (1000 * 60 * 60);
+        if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
+      }
+
+      if (!totalHours || totalHours <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide valid hours or start/end times.',
+        });
+      }
+
+      // 1. Create the structured log
+      await VolunteerLog.create({
+        userId: req.user._id,
+        date: date || new Date(),
+        startTime,
+        endTime,
+        category,
+        notes,
+        hoursLogged: totalHours,
+        opportunityId: opportunityId || null,
+      });
+
+      // 2. Update the profile totals
+      let profile = await VolunteerProfile.findOne({ userId: req.user._id });
+      if (!profile) {
+        profile = new VolunteerProfile({ userId: req.user._id });
+      }
+
+      profile.totalHours += totalHours;
+      profile.hoursThisYear += totalHours;
+
+      // Award badges
+      if (profile.totalHours >= 15) {
+        const hasBadge = profile.badges.some((b) => b.name === 'Master of Design');
+        if (!hasBadge) {
+          profile.badges.push({
+            name: 'Master of Design',
+            level: 'Expert Level',
+            badgeId: `#BDG-${Math.floor(1000 + Math.random() * 9000)}`,
+            hoursRequired: 15,
+            earnedAt: new Date(),
+          });
+          profile.nextBadgeGoal = 25;
+        }
+      }
+
+      await profile.save();
+
+      // if we logged hours for an opportunity, record an activity for the organizer
+      if (opportunity) {
+        await ActivityLog.create({
+          userId: opportunity.partnerId,
+          type: 'Volunteer Hours Logged',
+          content: `${req.user.firstName} logged ${totalHours} hours for "${opportunity.title}".`,
+          relatedId: opportunity._id,
+          relatedModel: 'Opportunity',
+        });
+      }
+
+      const responseData = {
+        totalHours: profile.totalHours,
+        hoursThisYear: profile.hoursThisYear,
+        logged: totalHours,
+      };
+      if (opportunity) {
+        responseData.opportunity = {
+          _id: opportunity._id,
+          title: opportunity.title,
+        };
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Hours logged successfully.',
+        data: responseData,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    }
+  };
 
 /**
  * @desc    Get history of logged hours
@@ -533,4 +668,5 @@ module.exports = {
   getAvailableOpportunities,
   joinOpportunity,
   uploadVolunteerDocs,
+  getClaimedOpportunities,
 };

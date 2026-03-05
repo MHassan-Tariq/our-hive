@@ -31,6 +31,11 @@ const VolunteerLogSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    opportunityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Opportunity',
+      default: null,
+    },
   },
   {
     timestamps: true,

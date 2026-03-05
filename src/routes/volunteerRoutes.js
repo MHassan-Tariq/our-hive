@@ -11,6 +11,7 @@ const {
   getDashboardStats,
   getBadgeDetails,
   getLogHistory,
+  getClaimedOpportunities,
 } = require('../controllers/volunteerController');
 
 // All volunteer routes require auth + volunteer role
@@ -77,7 +78,7 @@ router.get('/dashboard', getDashboardStats);
  * /api/volunteer/log-hours:
  *   post:
  *     summary: Log volunteer hours
- *     description: Submit structured hours with date, times, category and notes.
+ *     description: Submit structured hours with date, times, category and notes. Optionally include an `opportunityId` in the body or call the `/log-hours/{id}` variant to tie the entry to a specific opportunity.
  *     tags: [Volunteers]
  *     security:
  *       - bearerAuth: []
@@ -94,6 +95,7 @@ router.get('/dashboard', getDashboardStats);
  *               category: { type: string }
  *               notes: { type: string }
  *               hours: { type: number, description: "Optional manual override" }
+ *               opportunityId: { type: string, description: "(optional) ID of an opportunity for which these hours apply" }
  *     responses:
  *       200:
  *         description: Hours logged successfully.
@@ -101,6 +103,8 @@ router.get('/dashboard', getDashboardStats);
  *         description: Invalid hours provided.
  */
 router.post('/log-hours', logHours);
+// allow linking to a specific opportunity by id in the URL (optional) for convenience
+router.post('/log-hours/:id', logHours);
 
 /**
  * @swagger
@@ -215,5 +219,5 @@ router.post(
 );
 
 router.get('/my-tasks', getMyTasks);
-
+router.get('/claimed-opportunities', getClaimedOpportunities);
 module.exports = router;

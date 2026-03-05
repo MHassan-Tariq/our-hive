@@ -9,6 +9,7 @@ const {
 const {
   getAvailableOpportunities,
   joinOpportunity,
+  logHours,
 } = require('../controllers/volunteerController');
 const {
   getUpcomingEvents,
@@ -52,7 +53,7 @@ router.get('/my-registered', getMyRegisteredEvents);
  *     summary: Join an event (Any role)
  *     tags: [Opportunities]
  */
-router.post('/:id/join', joinEvent);
+router.post('/claim/:id', joinEvent);
 
 
 /**
@@ -441,6 +442,43 @@ router.post(
   protect,
   checkInToEvent
 );
+
+/**
+ * @swagger
+ * /api/opportunities/{id}/log-hours:
+ *   post:
+ *     summary: Log volunteer hours for a specific opportunity
+ *     description: Record hours worked on an event. Internally this reuses the volunteer `logHours` endpoint and will create an ActivityLog for the partner.
+ *     tags: [Opportunities]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Opportunity `_id` to associate the hours with
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               date: { type: string, format: date }
+ *               startTime: { type: string, example: "09:00 AM" }
+ *               endTime: { type: string, example: "01:00 PM" }
+ *               category: { type: string }
+ *               notes: { type: string }
+ *               hours: { type: number, description: "Optional manual override" }
+ *     responses:
+ *       200:
+ *         description: Hours logged successfully (returns updated totals).
+ *       400:
+ *         description: Validation error or user not joined/checked-in.
+ */
+router.post('/:id/log-hours', protect, authorize('volunteer'), logHours);
 
 module.exports = router;
 

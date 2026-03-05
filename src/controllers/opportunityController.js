@@ -80,12 +80,8 @@ const joinEvent = async (req, res) => {
     if (opportunity.attendees.length >= opportunity.requiredVolunteers) {
       return res.status(400).json({ success: false, message: 'Event is full.' });
     }
-
-    // Add to attendees
     opportunity.attendees.push(userId);
     await opportunity.save();
-
-    // If user is a volunteer, also update VolunteerProfile for stats/badges
     if (req.user.role === 'volunteer') {
       await VolunteerProfile.findOneAndUpdate(
         { userId },
@@ -260,10 +256,8 @@ const checkInToEvent = async (req, res) => {
     if (!alreadyJoined) {
         opportunity.attendees.push(userId);
     }
-    
+  
     await opportunity.save();
-
-    // If user is a volunteer, ensure it's in their joined list
     if (req.user.role === 'volunteer') {
       await VolunteerProfile.findOneAndUpdate(
         { userId },
@@ -271,8 +265,6 @@ const checkInToEvent = async (req, res) => {
         { upsert: true }
       );
     }
-
-    // Impact log for the organizer (partner) - Arrival
     await ActivityLog.create({
       userId: opportunity.partnerId,
       type: 'Participant Arrival',
