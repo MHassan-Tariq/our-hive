@@ -133,132 +133,145 @@ exports.getDistributionSchedule = async (req, res) => {
       return d;
     };
 
-    if (filter === 'tomorrow') {
+    if (filter === 'all') {
+      startDate = null;
+      endDate = null;
+    } 
+    else if (filter === 'tomorrow') {
       startDate = startOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
       endDate = endOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
-    } else if (filter === 'this_week') {
-      const day = now.getDay(); // 0 = Sunday, 1 = Monday ...
-      const diffToMonday = day === 0 ? -6 : 1 - day; // adjust so week starts Monday
+    } 
+    else if (filter === 'this_week') {
+      const day = now.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
       startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday));
-      endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)); // Sunday end
-    } else {
+      endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000));
+    } 
+    else {
       // default: today
-      // Include yesterday as well to catch overnight events starting yesterday and ending today
       startDate = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
       endDate = endOfDay(now);
     }
 
-    // Query by event date
+    // Build query
     const query = {
-      status: { $in: ['Confirmed', 'Active'] },
-      date: { $gte: startDate, $lte: endDate }
+      status: { $in: ['Confirmed', 'Active'] }
     };
 
+    if (filter !== 'all') {
+      query.date = { $gte: startDate, $lte: endDate };
+    }
+
     const slots = await Opportunity.find(query)
-      .select('title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring')
+      .select(
+        'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers'
+      )
       .sort({ date: 1, time: 1 });
 
-    // Pre-fetch all partner profiles to avoid N+1 issues in the map below
-    const partnerIds = [...new Set(slots.map(s => s.partnerId.toString()))];
+    // Fetch partner profiles
+    const partnerIds = [...new Set(slots.map(s => s.partnerId?.toString()).filter(Boolean))];
     const partnerProfiles = await PartnerProfile.find({ userId: { $in: partnerIds } });
+
     const profileMap = partnerProfiles.reduce((map, p) => {
       map[p.userId.toString()] = p;
       return map;
     }, {});
 
-    // If user is authenticated, we'll mark which ones they've registered for
     const currentUserId = req.user ? req.user.id : null;
 
-    // Helper to parse "10:00 AM" or "14:00" into numeric hours/minutes
+    // Parse time helper
     const parseTime = (timeStr) => {
       if (!timeStr) return null;
-      // Handle "HH:MM AM/PM" or "HH:MM"
+
       const match = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
       if (!match) return null;
-      
+
       let hours = parseInt(match[1], 10);
       const minutes = parseInt(match[2], 10);
       const modifier = match[3] ? match[3].toUpperCase() : null;
 
       if (modifier === 'PM' && hours < 12) hours += 12;
       if (modifier === 'AM' && hours === 12) hours = 0;
-      
+
       return { hours, minutes };
     };
 
-    const enrichedSlots = slots.map(slot => {
-      const slotObj = slot.toObject();
-      let isOpenNow = false;
-      let closesInMinutes = null;
+    const enrichedSlots = slots
+      .map(slot => {
+        const slotObj = slot.toObject();
+        let isOpenNow = false;
+        let closesInMinutes = null;
 
-      if (slotObj.date && slotObj.time && slotObj.endTime) {
-        const slotDate = new Date(slotObj.date);
-        
-        const startTimeParsed = parseTime(slotObj.time);
-        const endTimeParsed = parseTime(slotObj.endTime);
+        if (slotObj.date && slotObj.time && slotObj.endTime) {
+          const slotDate = new Date(slotObj.date);
 
-        if (startTimeParsed && endTimeParsed) {
-          const openTime = new Date(slotDate);
-          openTime.setHours(startTimeParsed.hours, startTimeParsed.minutes, 0, 0);
+          const startTimeParsed = parseTime(slotObj.time);
+          const endTimeParsed = parseTime(slotObj.endTime);
 
-          let closeTime = new Date(slotDate);
-          closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
+          if (startTimeParsed && endTimeParsed) {
+            const openTime = new Date(slotDate);
+            openTime.setHours(startTimeParsed.hours, startTimeParsed.minutes, 0, 0);
 
-          // Handle overnight wrap-around (if endTime is earlier than startTime)
-          if (closeTime < openTime) {
-            closeTime.setDate(closeTime.getDate() + 1);
-          }
+            let closeTime = new Date(slotDate);
+            closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
 
-          if (now >= openTime && now <= closeTime) {
-            isOpenNow = true;
-            closesInMinutes = Math.floor((closeTime - now) / (1000 * 60));
-          }
+            // Handle overnight events
+            if (closeTime < openTime) {
+              closeTime.setDate(closeTime.getDate() + 1);
+            }
 
-          // Filter for "today" view:
-          // If the event is from "yesterday", we only show it if it's currently open or cross-midnight
-          if (filter === 'today' || !req.query.filter) {
-            const todayStart = startOfDay(now);
-            const slotDateStart = startOfDay(slotDate);
-            
-            // If it's yesterday's event
-            if (slotDateStart < todayStart) {
-              // Only keep if it crosses into today (overnight) AND hasn't ended before today started
-              if (closeTime < todayStart) {
-                return null; // Skip this yesterday item
+            if (now >= openTime && now <= closeTime) {
+              isOpenNow = true;
+              closesInMinutes = Math.floor((closeTime - now) / (1000 * 60));
+            }
+
+            // Today filter cleanup for yesterday overnight events
+            if (filter === 'today' || !req.query.filter) {
+              const todayStart = startOfDay(now);
+              const slotDateStart = startOfDay(slotDate);
+
+              if (slotDateStart < todayStart) {
+                if (closeTime < todayStart) {
+                  return null;
+                }
               }
             }
           }
         }
-      }
 
-      slotObj.isOpenNow = isOpenNow;
-      slotObj.closesInMinutes = closesInMinutes;
-      
-      // Calculate spots remaining logic
-      const attendeesCount = slotObj.attendees ? slotObj.attendees.length : 0;
-      slotObj.totalAttendees = attendeesCount;
-      slotObj.remainingSpots = Math.max(0, (slotObj.requiredVolunteers || 0) - attendeesCount);
-      
-      // Check if current user is registered
-      slotObj.isRegistered = currentUserId ? slotObj.attendees.some(id => id.toString() === currentUserId.toString()) : false;
-      
-      // Clean up for public response
-      delete slotObj.attendees;
+        slotObj.isOpenNow = isOpenNow;
+        slotObj.closesInMinutes = closesInMinutes;
 
-      // Enrich with PartnerProfile data
-      const partnerProfile = profileMap[slotObj.partnerId?.toString()];
-      if (partnerProfile) {
-        slotObj.partnerId = {
-          _id: slotObj.partnerId,
-          orgName: partnerProfile.orgName,
-          organizationLogoUrl: partnerProfile.organizationLogoUrl
-        };
-      } else if (slotObj.partnerId) {
-        slotObj.partnerId = { _id: slotObj.partnerId, orgName: 'Our Hive Partner' };
-      }
+        const attendeesCount = slotObj.attendees ? slotObj.attendees.length : 0;
+        slotObj.totalAttendees = attendeesCount;
+        slotObj.remainingSpots = Math.max(
+          0,
+          (slotObj.requiredVolunteers || 0) - attendeesCount
+        );
 
-      return slotObj;
-    }).filter(slot => slot !== null);
+        slotObj.isRegistered = currentUserId
+          ? slotObj.attendees.some(id => id.toString() === currentUserId.toString())
+          : false;
+
+        delete slotObj.attendees;
+
+        const partnerProfile = profileMap[slotObj.partnerId?.toString()];
+        if (partnerProfile) {
+          slotObj.partnerId = {
+            _id: slotObj.partnerId,
+            orgName: partnerProfile.orgName,
+            organizationLogoUrl: partnerProfile.organizationLogoUrl
+          };
+        } else if (slotObj.partnerId) {
+          slotObj.partnerId = {
+            _id: slotObj.partnerId,
+            orgName: 'Our Hive Partner'
+          };
+        }
+
+        return slotObj;
+      })
+      .filter(slot => slot !== null);
 
     res.status(200).json({
       success: true,
@@ -269,10 +282,12 @@ exports.getDistributionSchedule = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
-
 /**
  * @desc    Get details for a specific opportunity (Public)
  * @route   GET /api/public/opportunities/:id
