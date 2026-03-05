@@ -115,18 +115,16 @@ exports.getOpportunities = async (req, res) => {
  */
 exports.getDistributionSchedule = async (req, res) => {
   try {
-    const { filter = 'today' } = req.query;
+    const { filter = 'today', search } = req.query;
     const now = new Date();
     let startDate, endDate;
 
-    // Helper to set time to start of day
     const startOfDay = (date) => {
       const d = new Date(date);
       d.setHours(0, 0, 0, 0);
       return d;
     };
 
-    // Helper to set time to end of day
     const endOfDay = (date) => {
       const d = new Date(date);
       d.setHours(23, 59, 59, 999);
@@ -144,16 +142,20 @@ exports.getDistributionSchedule = async (req, res) => {
     else if (filter === 'this_week') {
       const day = now.getDay();
       const diffToMonday = day === 0 ? -6 : 1 - day;
-      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday));
-      endDate = endOfDay(new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000));
+
+      startDate = startOfDay(
+        new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday)
+      );
+
+      endDate = endOfDay(
+        new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)
+      );
     } 
     else {
-      // default: today
       startDate = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
       endDate = endOfDay(now);
     }
 
-    // Build query
     const query = {
       status: { $in: ['Confirmed', 'Active'] }
     };
@@ -162,15 +164,29 @@ exports.getDistributionSchedule = async (req, res) => {
       query.date = { $gte: startDate, $lte: endDate };
     }
 
+    // 🔎 Search functionality
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+        { specificLocation: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } }
+      ];
+    }
+
     const slots = await Opportunity.find(query)
       .select(
         'title location specificLocation coordinates date time endTime imageurl category partnerId createdAt attendees requiredVolunteers whatToBring requirements'
       )
       .sort({ date: 1, time: 1 });
 
-    // Fetch partner profiles
-    const partnerIds = [...new Set(slots.map(s => s.partnerId?.toString()).filter(Boolean))];
-    const partnerProfiles = await PartnerProfile.find({ userId: { $in: partnerIds } });
+    const partnerIds = [
+      ...new Set(slots.map((s) => s.partnerId?.toString()).filter(Boolean)),
+    ];
+
+    const partnerProfiles = await PartnerProfile.find({
+      userId: { $in: partnerIds },
+    });
 
     const profileMap = partnerProfiles.reduce((map, p) => {
       map[p.userId.toString()] = p;
@@ -179,7 +195,6 @@ exports.getDistributionSchedule = async (req, res) => {
 
     const currentUserId = req.user ? req.user.id : null;
 
-    // Parse time helper
     const parseTime = (timeStr) => {
       if (!timeStr) return null;
 
@@ -190,14 +205,14 @@ exports.getDistributionSchedule = async (req, res) => {
       const minutes = parseInt(match[2], 10);
       const modifier = match[3] ? match[3].toUpperCase() : null;
 
-      if (modifier === 'PM' && hours < 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
+      if (modifier === "PM" && hours < 12) hours += 12;
+      if (modifier === "AM" && hours === 12) hours = 0;
 
       return { hours, minutes };
     };
 
     const enrichedSlots = slots
-      .map(slot => {
+      .map((slot) => {
         const slotObj = slot.toObject();
         let isOpenNow = false;
         let closesInMinutes = null;
@@ -215,7 +230,6 @@ exports.getDistributionSchedule = async (req, res) => {
             let closeTime = new Date(slotDate);
             closeTime.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
 
-            // Handle overnight events
             if (closeTime < openTime) {
               closeTime.setDate(closeTime.getDate() + 1);
             }
@@ -225,8 +239,7 @@ exports.getDistributionSchedule = async (req, res) => {
               closesInMinutes = Math.floor((closeTime - now) / (1000 * 60));
             }
 
-            // Today filter cleanup for yesterday overnight events
-            if (filter === 'today' || !req.query.filter) {
+            if (filter === "today" || !req.query.filter) {
               const todayStart = startOfDay(now);
               const slotDateStart = startOfDay(slotDate);
 
@@ -243,6 +256,7 @@ exports.getDistributionSchedule = async (req, res) => {
         slotObj.closesInMinutes = closesInMinutes;
 
         const attendeesCount = slotObj.attendees ? slotObj.attendees.length : 0;
+
         slotObj.totalAttendees = attendeesCount;
         slotObj.remainingSpots = Math.max(
           0,
@@ -250,41 +264,44 @@ exports.getDistributionSchedule = async (req, res) => {
         );
 
         slotObj.isRegistered = currentUserId
-          ? slotObj.attendees.some(id => id.toString() === currentUserId.toString())
+          ? slotObj.attendees.some(
+              (id) => id.toString() === currentUserId.toString()
+            )
           : false;
 
         delete slotObj.attendees;
 
         const partnerProfile = profileMap[slotObj.partnerId?.toString()];
+
         if (partnerProfile) {
           slotObj.partnerId = {
             _id: slotObj.partnerId,
             orgName: partnerProfile.orgName,
-            organizationLogoUrl: partnerProfile.organizationLogoUrl
+            organizationLogoUrl: partnerProfile.organizationLogoUrl,
           };
         } else if (slotObj.partnerId) {
           slotObj.partnerId = {
             _id: slotObj.partnerId,
-            orgName: 'Our Hive Partner'
+            orgName: "Our Hive Partner",
           };
         }
 
         return slotObj;
       })
-      .filter(slot => slot !== null);
+      .filter((slot) => slot !== null);
 
     res.status(200).json({
       success: true,
       filter,
+      search: search || null,
       count: enrichedSlots.length,
-      data: enrichedSlots
+      data: enrichedSlots,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
