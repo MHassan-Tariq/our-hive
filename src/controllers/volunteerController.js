@@ -2,8 +2,11 @@ const VolunteerProfile = require('../models/VolunteerProfile');
 const Opportunity = require('../models/Opportunity');
 const ActivityLog = require('../models/ActivityLog');
 const VolunteerLog = require('../models/VolunteerLog');
+const Badge = require('../models/Badge');
 const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
+const cloudinary = require('../utils/cloudinary');
+const fs = require('fs');
 
 /**
  * @desc    Save / update a volunteer's profile
@@ -279,7 +282,44 @@ const getClaimedOpportunities = async (req, res) => {
  * @route   POST /api/volunteer/log-hours
  * @access  Private (volunteer)
  */
-  const logHours = async (req, res) => {
+
+// Helper function to assign badges based on total hours
+const assignBadges = async (profile) => {
+  const allBadges = await Badge.find().sort({ timeRequired: 1 });
+  let newBadges = [];
+
+  for (const badge of allBadges) {
+    // Convert timeRequired to number to handle both string and number types
+    const badgeHoursRequired = Number(badge.timeRequired);
+    
+    if (profile.totalHours >= badgeHoursRequired) {
+      const hasBadge = profile.badges.some((b) => b.name === badge.title);
+      if (!hasBadge) {
+        profile.badges.push({
+          name: badge.title,
+          level: badge.level,
+          badgeId: `#BDG-${Math.floor(1000 + Math.random() * 9000)}`,
+          hoursRequired: badgeHoursRequired,
+          imageUrl: badge.imageUrl,
+          earnedAt: new Date(),
+        });
+        newBadges.push(badge.title);
+      }
+    }
+  }
+
+  // Update nextBadgeGoal to the next badge's timeRequired
+  const nextBadge = allBadges.find(b => Number(b.timeRequired) > profile.totalHours);
+  if (nextBadge) {
+    profile.nextBadgeGoal = Number(nextBadge.timeRequired);
+  } else {
+    profile.nextBadgeGoal = profile.totalHours + 10; // Default if no more badges
+  }
+
+  return newBadges;
+};
+
+const logHours = async (req, res) => {
     try {
       // allow opportunity ID from either route param or body
       const opportunityId = req.params.id || req.body.opportunityId;
@@ -351,20 +391,8 @@ const category = incomingCategory || 'General Volunteering';
       profile.totalHours += totalHours;
       profile.hoursThisYear += totalHours;
 
-      // Award badges
-      if (profile.totalHours >= 15) {
-        const hasBadge = profile.badges.some((b) => b.name === 'Master of Design');
-        if (!hasBadge) {
-          profile.badges.push({
-            name: 'Master of Design',
-            level: 'Expert Level',
-            badgeId: `#BDG-${Math.floor(1000 + Math.random() * 9000)}`,
-            hoursRequired: 15,
-            earnedAt: new Date(),
-          });
-          profile.nextBadgeGoal = 25;
-        }
-      }
+      // Award badges based on total hours
+      const newBadges = await assignBadges(profile);
 
       await profile.save();
 
@@ -484,6 +512,7 @@ const saveProfile = async (req, res) => {
     // Handle uploaded files if any
     let governmentIdUrl = req.body.governmentIdUrl;
     let drivingLicenseUrl = req.body.drivingLicenseUrl;
+    // `profilePictureUrl` already defined via destructuring above
 
     if (req.files) {
       if (req.files.governmentId) {
@@ -491,6 +520,31 @@ const saveProfile = async (req, res) => {
       }
       if (req.files.drivingLicense) {
         drivingLicenseUrl = req.files.drivingLicense[0].path;
+      }
+      if (req.files.profilePicture) {
+        try {
+          const localFilePath = req.files.profilePicture[0].path;
+          // Upload profile picture to Cloudinary
+          const result = await cloudinary.uploader.upload(
+            localFilePath,
+            {
+              folder: 'volunteer-profiles',
+              resource_type: 'auto',
+              quality: 'auto',
+            }
+          );
+          profilePictureUrl = result.secure_url;
+          // Delete local temp file after successful upload
+          if (fs.existsSync(localFilePath)) {
+            fs.unlinkSync(localFilePath);
+          }
+        } catch (cloudinaryErr) {
+          console.error('Cloudinary upload error:', cloudinaryErr);
+          return res.status(500).json({
+            success: false,
+            message: 'Failed to upload profile picture to cloud storage',
+          });
+        }
       }
     }
 
@@ -517,8 +571,8 @@ const saveProfile = async (req, res) => {
         availability,
         governmentIdUrl,
         drivingLicenseUrl,
-        agreedToHandbook,
         profilePictureUrl,
+        agreedToHandbook,
         location,
         backgroundCheckStatus,
       });
@@ -546,12 +600,17 @@ const getProfile = async (req, res) => {
 
     // Add email and other user info
     const profileData = profile.toObject();
+    // ensure the avatar field always exists (empty string if none)
+    profileData.profilePictureUrl = profileData.profilePictureUrl || '';
     profileData.email = req.user.email;
     profileData.volunteerSince = req.user.createdAt;
     profileData.mailingAddress = req.user.mailingAddress || profile.mailingAddress;
     profileData.phone = req.user.phone || profile.phone;
     profileData.firstName = req.user.firstName;
     profileData.lastName = req.user.lastName;
+    // include existing ID document URLs if any
+    profileData.governmentIdUrl = profile.governmentIdUrl || '';
+    profileData.drivingLicenseUrl = profile.drivingLicenseUrl || '';
 
     res.status(200).json({ success: true, data: profileData });
   } catch (err) {
@@ -577,15 +636,21 @@ const getDashboardStats = async (req, res) => {
       return res.status(200).json({
         success: true,
         data: {
+          fullName: `${req.user.firstName} ${req.user.lastName}`,
           hoursThisYear: 0,
           totalHours: 0,
           totalDeliveries: 0,
           totalImpact: "0 lbs",
           nextBadgeGoal: 10,
+          badges: [],
           upcomingShifts: [],
         },
       });
     }
+
+    // Ensure badges are up to date
+    await assignBadges(profile);
+    await profile.save();
 
     res.status(200).json({
       success: true,
@@ -657,6 +722,55 @@ const uploadVolunteerDocs = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Manually reassign badges to a volunteer (useful for retroactive assignment)
+ * @route   POST /api/volunteer/reassign-badges
+ * @access  Private (volunteer or admin)
+ */
+const reassignBadges = async (req, res) => {
+  try {
+    const userId = req.params.userId || req.user._id;
+    
+    // Verification: user can reassign for themselves or admin can reassign for anyone
+    if (req.user._id.toString() !== userId.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to reassign badges for this user.',
+      });
+    }
+
+    const profile = await VolunteerProfile.findOne({ userId });
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Volunteer profile not found',
+      });
+    }
+
+    // Clear existing badges and reassign from scratch
+    const previousBadges = profile.badges.length;
+    profile.badges = [];
+
+    // Reassign badges based on current total hours
+    const newBadges = await assignBadges(profile);
+    await profile.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Badges reassigned. Previous: ${previousBadges}, Current: ${profile.badges.length}, New badges earned: ${newBadges.join(', ') || 'None'}`,
+      data: {
+        totalHours: profile.totalHours,
+        badges: profile.badges,
+        nextBadgeGoal: profile.nextBadgeGoal,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 module.exports = {
   saveProfile,
   getProfile,
@@ -669,4 +783,5 @@ module.exports = {
   joinOpportunity,
   uploadVolunteerDocs,
   getClaimedOpportunities,
+  reassignBadges,
 };

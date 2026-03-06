@@ -88,13 +88,14 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               email: { type: string, format: email, example: "jane@ourhive.com" }
  *               password: { type: string, minLength: 6, example: "password123" }
  *               phone: { type: string, example: "(555) 000-0000" }
+ *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: string, description: "JSON array or comma-separated string" }
  *               availability: { type: string, description: "JSON object string" }
  *               governmentId: { type: string, format: binary }
  *               drivingLicense: { type: string, format: binary }
  *     responses:
  *       201:
- *         description: Volunteer registered and pending approval.
+ *         description: Volunteer registered and pending approval. Response contains `token`, `user` object, and `profile` with document URLs if uploaded.
  */
 router.post(
   '/volunteer-register',

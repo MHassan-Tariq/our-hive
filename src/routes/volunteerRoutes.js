@@ -12,6 +12,7 @@ const {
   getBadgeDetails,
   getLogHistory,
   getClaimedOpportunities,
+  reassignBadges,
 } = require('../controllers/volunteerController');
 
 // All volunteer routes require auth + volunteer role
@@ -125,13 +126,13 @@ router.get('/logs', getLogHistory);
  * /api/volunteer/profile:
  *   get:
  *     summary: Get volunteer profile
- *     description: Retrieve detailed profile including impact stats and verification status.
+ *     description: Retrieve detailed profile including impact stats, verification status, profile image URL, and any uploaded ID documents (governmentIdUrl & drivingLicenseUrl).
  *     tags: [Volunteers]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Profile retrieved successfully.
+ *         description: Profile retrieved successfully. Response body includes `profilePictureUrl`; may be empty string if no image set.
  *   post:
  *     summary: Save or update volunteer profile
  *     description: Detailed profile update including availability, document uploads, and avatar.
@@ -159,13 +160,17 @@ router.get('/logs', getLogHistory);
  *               drivingLicense:
  *                 type: string
  *                 format: binary
+ *               profilePicture:
+ *                 type: string
+ *                 format: binary
+ *                 description: Avatar or profile image file (uploaded to Cloudinary, returns secure URL).
  *               agreedToHandbook: { type: boolean }
  *               profilePictureUrl: { type: string }
  *               location: { type: string, example: "New York, NY" }
  *               backgroundCheckStatus: { type: string, enum: ['Not Started', 'Pending', 'Verified', 'Action Required'] }
  *     responses:
  *       200:
- *         description: Profile saved successfully.
+ *         description: Profile saved successfully. Returned object includes `profilePictureUrl`.
  */
 router.route('/profile')
   .get(getProfile)
@@ -173,6 +178,7 @@ router.route('/profile')
     upload.fields([
       { name: 'governmentId', maxCount: 1 },
       { name: 'drivingLicense', maxCount: 1 },
+      { name: 'profilePicture', maxCount: 1 },
     ]),
     saveProfile
   );
@@ -217,6 +223,47 @@ router.post(
   ]),
   require('../controllers/volunteerController').uploadVolunteerDocs
 );
+
+/**
+ * @swagger
+ * /api/volunteer/reassign-badges:
+ *   post:
+ *     summary: Manually reassign badges based on current total hours
+ *     description: Clears and reassigns all badges based on the volunteer's current total hours. Useful for retroactive badge assignment.
+ *     tags: [Volunteers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Badges reassigned successfully for current user.
+ *       404:
+ *         description: Volunteer profile not found.
+ */
+router.post('/reassign-badges', reassignBadges);
+
+/**
+ * @swagger
+ * /api/volunteer/reassign-badges/{userId}:
+ *   post:
+ *     summary: Manually reassign badges for a specific user (admin only)
+ *     description: Admin endpoint to reassign badges for another user.
+ *     tags: [Volunteers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID to reassign badges for.
+ *     responses:
+ *       200:
+ *         description: Badges reassigned successfully.
+ *       404:
+ *         description: Volunteer profile not found.
+ */
+router.post('/reassign-badges/:userId', reassignBadges);
 
 router.get('/my-tasks', getMyTasks);
 router.get('/claimed-opportunities', getClaimedOpportunities);

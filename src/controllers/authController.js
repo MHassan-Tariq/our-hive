@@ -148,16 +148,19 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
   let drivingLicenseUrl = '';
 
   if (req.files) {
+    console.log('volunteerRegister files received:', Object.keys(req.files));
     if (req.files.governmentId) {
       governmentIdUrl = req.files.governmentId[0].path;
+      console.log('stored gov ID url:', governmentIdUrl);
     }
     if (req.files.drivingLicense) {
       drivingLicenseUrl = req.files.drivingLicense[0].path;
+      console.log('stored driving license url:', drivingLicenseUrl);
     }
   }
 
   // Create Volunteer Profile
-  await VolunteerProfile.create({
+  const profile = await VolunteerProfile.create({
     userId: user._id,
     fullName: fullName || `${firstName} ${lastName}`,
     phone: phone || user.phone,
@@ -185,6 +188,10 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
       email: user.email,
       role: user.role,
       isApproved: user.isApproved
+    },
+    profile: {
+      governmentIdUrl: profile.governmentIdUrl || '',
+      drivingLicenseUrl: profile.drivingLicenseUrl || ''
     }
   });
 });
