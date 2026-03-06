@@ -283,14 +283,27 @@ const getClaimedOpportunities = async (req, res) => {
  * @access  Private (volunteer)
  */
 
+// Helper function to parse timeRequired from string or number
+const parseTimeRequired = (timeRequired) => {
+  if (typeof timeRequired === 'number') {
+    return timeRequired;
+  }
+  if (typeof timeRequired === 'string') {
+    // Extract number from strings like "12 Hour", "25 hours", etc.
+    const match = timeRequired.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+  return 0;
+};
+
 // Helper function to assign badges based on total hours
 const assignBadges = async (profile) => {
   const allBadges = await Badge.find().sort({ timeRequired: 1 });
   let newBadges = [];
 
   for (const badge of allBadges) {
-    // Convert timeRequired to number to handle both string and number types
-    const badgeHoursRequired = Number(badge.timeRequired);
+    // Parse timeRequired to handle both string and number types
+    const badgeHoursRequired = parseTimeRequired(badge.timeRequired);
     
     if (profile.totalHours >= badgeHoursRequired) {
       const hasBadge = profile.badges.some((b) => b.name === badge.title);
@@ -309,9 +322,9 @@ const assignBadges = async (profile) => {
   }
 
   // Update nextBadgeGoal to the next badge's timeRequired
-  const nextBadge = allBadges.find(b => Number(b.timeRequired) > profile.totalHours);
+  const nextBadge = allBadges.find(b => parseTimeRequired(b.timeRequired) > profile.totalHours);
   if (nextBadge) {
-    profile.nextBadgeGoal = Number(nextBadge.timeRequired);
+    profile.nextBadgeGoal = parseTimeRequired(nextBadge.timeRequired);
   } else {
     profile.nextBadgeGoal = profile.totalHours + 10; // Default if no more badges
   }

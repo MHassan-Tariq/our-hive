@@ -176,35 +176,72 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     console.log('No files uploaded via multipart.');
   }
 
-  // Check for file paths in req.body (string paths from mobile app)
+  // Check for file paths in req.body (string paths or base64 from mobile app)
+  // Mobile apps should send images as base64 data URLs: "data:image/jpeg;base64,/9j/4AAQ..."
   const { governmentId, drivingLicense } = req.body;
   if (governmentId && typeof governmentId === 'string' && !governmentIdUrl) {
-    console.log('Uploading government ID from path:', governmentId);
+    console.log('Processing government ID:', governmentId.substring(0, 50) + '...');
     try {
-      const result = await cloudinary.uploader.upload(governmentId, {
-        folder: 'volunteer-documents',
-        resource_type: 'auto',
-        quality: 'auto',
-      });
-      governmentIdUrl = result.secure_url;
-      console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
+      // Check if it's a base64 data URL
+      if (governmentId.startsWith('data:image/')) {
+        const result = await cloudinary.uploader.upload(governmentId, {
+          folder: 'volunteer-documents',
+          resource_type: 'auto',
+          quality: 'auto',
+        });
+        governmentIdUrl = result.secure_url;
+        console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
+      } else if (governmentId.startsWith('http')) {
+        // Already a URL
+        governmentIdUrl = governmentId;
+        console.log('Government ID URL provided:', governmentIdUrl);
+      } else {
+        // Assume it's a local path that needs to be uploaded
+        console.log('Attempting to upload government ID from local path:', governmentId);
+        const result = await cloudinary.uploader.upload(governmentId, {
+          folder: 'volunteer-documents',
+          resource_type: 'auto',
+          quality: 'auto',
+        });
+        governmentIdUrl = result.secure_url;
+        console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
+      }
     } catch (error) {
-      console.error('Error uploading government ID:', error);
+      console.error('Error processing government ID:', error.message);
+      // Don't fail registration, just log the error
     }
   }
 
   if (drivingLicense && typeof drivingLicense === 'string' && !drivingLicenseUrl) {
-    console.log('Uploading driving license from path:', drivingLicense);
+    console.log('Processing driving license:', drivingLicense.substring(0, 50) + '...');
     try {
-      const result = await cloudinary.uploader.upload(drivingLicense, {
-        folder: 'volunteer-documents',
-        resource_type: 'auto',
-        quality: 'auto',
-      });
-      drivingLicenseUrl = result.secure_url;
-      console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
+      // Check if it's a base64 data URL
+      if (drivingLicense.startsWith('data:image/')) {
+        const result = await cloudinary.uploader.upload(drivingLicense, {
+          folder: 'volunteer-documents',
+          resource_type: 'auto',
+          quality: 'auto',
+        });
+        drivingLicenseUrl = result.secure_url;
+        console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
+      } else if (drivingLicense.startsWith('http')) {
+        // Already a URL
+        drivingLicenseUrl = drivingLicense;
+        console.log('Driving license URL provided:', drivingLicenseUrl);
+      } else {
+        // Assume it's a local path that needs to be uploaded
+        console.log('Attempting to upload driving license from local path:', drivingLicense);
+        const result = await cloudinary.uploader.upload(drivingLicense, {
+          folder: 'volunteer-documents',
+          resource_type: 'auto',
+          quality: 'auto',
+        });
+        drivingLicenseUrl = result.secure_url;
+        console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
+      }
     } catch (error) {
-      console.error('Error uploading driving license:', error);
+      console.error('Error processing driving license:', error.message);
+      // Don't fail registration, just log the error
     }
   }
 

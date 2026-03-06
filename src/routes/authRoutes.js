@@ -74,7 +74,7 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  * @swagger
  * /api/auth/volunteer-register:
  *   post:
- *     summary: Consolidated Volunteer Registration with documents
+ *     summary: Consolidated Volunteer Registration with documents (supports multipart files or base64 images)
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -91,8 +91,8 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: string, description: "JSON array or comma-separated string" }
  *               availability: { type: string, description: "JSON object string" }
- *               governmentId: { type: string, description: "File upload or file path string" }
- *               drivingLicense: { type: string, description: "File upload or file path string" }
+ *               governmentId: { type: string, description: "File upload (multipart) or base64 data URL (data:image/...)" }
+ *               drivingLicense: { type: string, description: "File upload (multipart) or base64 data URL (data:image/...)" }
  *         application/json:
  *           schema:
  *             type: object
@@ -105,8 +105,8 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: array, items: { type: string } }
  *               availability: { type: object, properties: { morning: { type: boolean }, afternoon: { type: boolean }, evenings: { type: boolean }, weekend: { type: boolean } } }
- *               governmentId: { type: string, description: "File path string for mobile apps" }
- *               drivingLicense: { type: string, description: "File path string for mobile apps" }
+ *               governmentId: { type: string, description: "Base64 data URL (data:image/...) for mobile apps" }
+ *               drivingLicense: { type: string, description: "Base64 data URL (data:image/...) for mobile apps" }
  *     responses:
  *       201:
  *         description: Volunteer registered and pending approval. Response contains `token`, `user` object, and `profile` with document URLs if uploaded.
