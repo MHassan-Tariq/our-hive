@@ -93,24 +93,31 @@ const register = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const volunteerRegister = asyncHandler(async (req, res, next) => {
+  console.log('--- Volunteer Registration Started ---');
   let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress } = req.body;
+  console.log('Received body:', req.body);
 
   // Handle single "fullName" field from UI if firstName/lastName missing
   if (fullName && (!firstName || !lastName)) {
     const parts = fullName.trim().split(' ');
     if (!firstName) firstName = parts[0] || '';
     if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+    console.log('Parsed names from fullName:', { firstName, lastName });
   }
 
   // Check if email or phone already exists
+  console.log('Checking if email already exists:', email);
   const existingEmail = await User.findOne({ email });
   if (existingEmail) {
+    console.log('Email already exists:', email);
     return next(new ErrorResponse('A user with that email already exists', 400));
   }
 
   if (phone) {
+    console.log('Checking if phone already exists:', phone);
     const existingPhone = await User.findOne({ phone });
     if (existingPhone) {
+      console.log('Phone already exists:', phone);
       return next(new ErrorResponse('A user with that phone number already exists', 400));
     }
   }
@@ -120,9 +127,12 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     try {
       skills = skills.startsWith('[') ? JSON.parse(skills) : skills.split(',').map(s => s.trim());
     } catch (e) {
+      console.log('Error parsing skills JSON, falling back to comma split:', e);
       skills = skills.split(',').map(s => s.trim());
     }
   }
+  console.log('Processed skills:', skills);
+
   if (typeof availability === 'string') {
     try {
       availability = JSON.parse(availability);
@@ -130,8 +140,10 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
       console.error("Error parsing availability JSON:", e);
     }
   }
+  console.log('Processed availability:', availability);
 
   // Create user - Volunteers are NOT approved by default
+  console.log('Creating user...');
   const user = await User.create({
     firstName,
     lastName,
@@ -142,24 +154,28 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     isApproved: false,
     mailingAddress
   });
+  console.log('User created:', { id: user._id, email: user.email });
 
   // Handle uploaded files
   let governmentIdUrl = '';
   let drivingLicenseUrl = '';
 
   if (req.files) {
-    console.log('volunteerRegister files received:', Object.keys(req.files));
+    console.log('Files received:', Object.keys(req.files));
     if (req.files.governmentId) {
       governmentIdUrl = req.files.governmentId[0].path;
-      console.log('stored gov ID url:', governmentIdUrl);
+      console.log('Stored government ID url:', governmentIdUrl);
     }
     if (req.files.drivingLicense) {
       drivingLicenseUrl = req.files.drivingLicense[0].path;
-      console.log('stored driving license url:', drivingLicenseUrl);
+      console.log('Stored driving license url:', drivingLicenseUrl);
     }
+  } else {
+    console.log('No files uploaded.');
   }
 
   // Create Volunteer Profile
+  console.log('Creating volunteer profile...');
   const profile = await VolunteerProfile.create({
     userId: user._id,
     fullName: fullName || `${firstName} ${lastName}`,
@@ -175,10 +191,11 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     drivingLicenseUrl,
     backgroundCheckStatus: 'Pending'
   });
+  console.log('Volunteer profile created:', { id: profile._id, userId: profile.userId });
 
-  // For consolidated signup, we return success but maybe not a token yet
-  // to enforce the "wait for approval" flow if they try to log in immediately.
+  // Return success response
   const token = user.getSignedJwtToken();
+  console.log('Registration successful, sending response.');
   res.status(201).json({
     success: true,
     token,
