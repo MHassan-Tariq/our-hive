@@ -91,8 +91,22 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: string, description: "JSON array or comma-separated string" }
  *               availability: { type: string, description: "JSON object string" }
- *               governmentId: { type: string, format: binary }
- *               drivingLicense: { type: string, format: binary }
+ *               governmentId: { type: string, description: "File upload or file path string" }
+ *               drivingLicense: { type: string, description: "File upload or file path string" }
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password]
+ *             properties:
+ *               fullName: { type: string, example: "Jane Doe" }
+ *               email: { type: string, format: email, example: "jane@ourhive.com" }
+ *               password: { type: string, minLength: 6, example: "password123" }
+ *               phone: { type: string, example: "(555) 000-0000" }
+ *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
+ *               skills: { type: array, items: { type: string } }
+ *               availability: { type: object, properties: { morning: { type: boolean }, afternoon: { type: boolean }, evenings: { type: boolean }, weekend: { type: boolean } } }
+ *               governmentId: { type: string, description: "File path string for mobile apps" }
+ *               drivingLicense: { type: string, description: "File path string for mobile apps" }
  *     responses:
  *       201:
  *         description: Volunteer registered and pending approval. Response contains `token`, `user` object, and `profile` with document URLs if uploaded.

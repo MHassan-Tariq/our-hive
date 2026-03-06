@@ -5,6 +5,7 @@ const ParticipantProfile = require('../models/ParticipantProfile');
 const PartnerProfile = require('../models/PartnerProfile');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const cloudinary = require('../utils/cloudinary');
 
 // Helper to send token response
 const sendTokenResponse = (user, statusCode, res) => {
@@ -160,6 +161,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
   let governmentIdUrl = '';
   let drivingLicenseUrl = '';
 
+  // Check for files in req.files (multipart upload)
   if (req.files) {
     console.log('Files received:', Object.keys(req.files));
     if (req.files.governmentId) {
@@ -171,7 +173,39 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
       console.log('Stored driving license url:', drivingLicenseUrl);
     }
   } else {
-    console.log('No files uploaded.');
+    console.log('No files uploaded via multipart.');
+  }
+
+  // Check for file paths in req.body (string paths from mobile app)
+  const { governmentId, drivingLicense } = req.body;
+  if (governmentId && typeof governmentId === 'string' && !governmentIdUrl) {
+    console.log('Uploading government ID from path:', governmentId);
+    try {
+      const result = await cloudinary.uploader.upload(governmentId, {
+        folder: 'volunteer-documents',
+        resource_type: 'auto',
+        quality: 'auto',
+      });
+      governmentIdUrl = result.secure_url;
+      console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
+    } catch (error) {
+      console.error('Error uploading government ID:', error);
+    }
+  }
+
+  if (drivingLicense && typeof drivingLicense === 'string' && !drivingLicenseUrl) {
+    console.log('Uploading driving license from path:', drivingLicense);
+    try {
+      const result = await cloudinary.uploader.upload(drivingLicense, {
+        folder: 'volunteer-documents',
+        resource_type: 'auto',
+        quality: 'auto',
+      });
+      drivingLicenseUrl = result.secure_url;
+      console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
+    } catch (error) {
+      console.error('Error uploading driving license:', error);
+    }
   }
 
   // Create Volunteer Profile
