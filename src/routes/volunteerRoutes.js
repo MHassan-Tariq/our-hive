@@ -13,11 +13,29 @@ const {
   getLogHistory,
   getClaimedOpportunities,
   reassignBadges,
+  getMyBadges,
 } = require('../controllers/volunteerController');
 
 // All volunteer routes require auth + volunteer role
 router.use(protect);
 router.use(authorize('volunteer'));
+
+/**
+ * @swagger
+ * /api/volunteer/my-badges:
+ *   get:
+ *     summary: Get all badges for the logged-in volunteer
+ *     description: Returns a list of earned badges sorted by priority (hours required descending).
+ *     tags: [Volunteers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of badges retrieved successfully.
+ *       404:
+ *         description: Profile not found.
+ */
+router.get('/my-badges', getMyBadges);
 
 // ... (lines 1-56 kept)
 /**

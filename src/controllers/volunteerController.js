@@ -594,10 +594,15 @@ const saveProfile = async (req, res) => {
       });
     }
 
-    // Update User record with mailingAddress and email if provided (for both new and existing profiles)
-    if (mailingAddress !== undefined) {
-      await User.findByIdAndUpdate(req.user._id, { mailingAddress });
+    // Update User record with mailingAddress, email and phone if provided (for both new and existing profiles)
+    const userUpdates = {};
+    if (mailingAddress !== undefined) userUpdates.mailingAddress = mailingAddress;
+    if (phone !== undefined) userUpdates.phone = phone;
+
+    if (Object.keys(userUpdates).length > 0) {
+      await User.findByIdAndUpdate(req.user._id, userUpdates);
     }
+
     if (email && email !== req.user.email) {
       // Check if new email is already taken
       const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -643,6 +648,12 @@ const getProfile = async (req, res) => {
     // include existing ID document URLs if any
     profileData.governmentIdUrl = profile.governmentIdUrl || '';
     profileData.drivingLicenseUrl = profile.drivingLicenseUrl || '';
+
+    // ✅ Transform badges to only include title and url
+    profileData.badges = (profileData.badges || []).map(badge => ({
+      title: badge.name,
+      url: badge.imageUrl
+    }));
 
     res.status(200).json({ success: true, data: profileData });
   } catch (err) {
@@ -803,6 +814,40 @@ const reassignBadges = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Get all badges for the logged-in volunteer (sorted by priority/hours)
+ * @route   GET /api/volunteer/my-badges
+ * @access  Private (volunteer)
+ */
+const getMyBadges = async (req, res) => {
+  try {
+    const profile = await VolunteerProfile.findOne({ userId: req.user._id });
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Profile not found' });
+    }
+
+    // Map badges to only include name/title and imageUrl, then sort by hoursRequired descending
+    const sortedBadges = [...profile.badges]
+      .sort((a, b) => b.hoursRequired - a.hoursRequired)
+      .map(badge => ({
+        title: badge.name,       // using 'title' instead of 'name'
+        imageUrl: badge.imageUrl, 
+        level: badge.level,
+        hoursRequired: badge.hoursRequired,
+        badgeId: badge.badgeId,
+        earnedAt: badge.earnedAt,
+      }));
+
+    res.status(200).json({
+      success: true,
+      count: sortedBadges.length,
+      data: sortedBadges,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
 module.exports = {
   saveProfile,
   getProfile,
@@ -816,4 +861,5 @@ module.exports = {
   uploadVolunteerDocs,
   getClaimedOpportunities,
   reassignBadges,
+  getMyBadges,
 };

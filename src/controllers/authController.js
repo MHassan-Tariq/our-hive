@@ -141,9 +141,85 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
       console.error("Error parsing availability JSON:", e);
     }
   }
+
+  // Handle availability as array (commonly sent from Flutter checkbox lists)
+  if (Array.isArray(availability)) {
+    console.log('Detected availability as array, converting to object...');
+    const availObj = { morning: false, afternoon: false, evenings: false, weekend: false };
+    availability.forEach(item => {
+      const lower = item.toString().toLowerCase();
+      if (lower.includes('morning')) availObj.morning = true;
+      if (lower.includes('afternoon')) availObj.afternoon = true;
+      if (lower.includes('evening')) availObj.evenings = true;
+      if (lower.includes('weekend')) availObj.weekend = true;
+    });
+    availability = availObj;
+  }
   console.log('Processed availability:', availability);
 
   // Create user - Volunteers are NOT approved by default
+  console.log('Processing files and creating user...');
+
+  // Handle uploaded files
+  let governmentIdUrl = '';
+  let drivingLicenseUrl = '';
+  let profilePictureUrl = '';
+
+  // 1. Check for files in req.files (multipart upload from Web or Flutter)
+  if (req.files) {
+    console.log('Files received in req.files:', Object.keys(req.files));
+    if (req.files.governmentId) {
+      governmentIdUrl = req.files.governmentId[0].path;
+      console.log('✅ Government ID received as file:', governmentIdUrl);
+    }
+    if (req.files.drivingLicense) {
+      drivingLicenseUrl = req.files.drivingLicense[0].path;
+      console.log('✅ Driving License received as file:', drivingLicenseUrl);
+    }
+    if (req.files.profilePicture) {
+      profilePictureUrl = req.files.profilePicture[0].path;
+      console.log('✅ Profile Picture received as file:', profilePictureUrl);
+    }
+  }
+
+  // 2. Check for base64 images in req.body (mobile app fallback)
+  const { governmentId, drivingLicense, profilePicture } = req.body;
+
+  // Helper for base64/local path upload
+  const uploadToCloudinary = async (source, folder) => {
+    // If we already have a URL from req.files, or source is empty/already a URL, skip
+    if (!source || typeof source !== 'string' || source.startsWith('http')) return source;
+
+    // SANITY CHECK: Detect if client is sending a local mobile path string incorrectly
+    if (source.startsWith('/data/user/') || source.startsWith('/var/mobile/') || source.startsWith('cache/')) {
+      console.error(`❌ CLIENT ERROR: Mobile app sent a local device path instead of a file upload or base64: ${source}`);
+      return '';
+    }
+
+    try {
+      console.log(`Starting Cloudinary upload to ${folder}...`);
+      const result = await cloudinary.uploader.upload(source, {
+        folder: folder,
+        resource_type: 'auto',
+        quality: 'auto',
+      });
+      return result.secure_url;
+    } catch (error) {
+      console.error(`❌ Cloudinary Upload Error in ${folder}:`, error.message || error);
+      return '';
+    }
+  };
+
+  if (!governmentIdUrl && governmentId) {
+    governmentIdUrl = await uploadToCloudinary(governmentId, 'volunteer-documents');
+  }
+  if (!drivingLicenseUrl && drivingLicense) {
+    drivingLicenseUrl = await uploadToCloudinary(drivingLicense, 'volunteer-documents');
+  }
+  if (!profilePictureUrl && profilePicture) {
+    profilePictureUrl = await uploadToCloudinary(profilePicture, 'volunteer-profiles');
+  }
+
   console.log('Creating user...');
   const user = await User.create({
     firstName,
@@ -153,97 +229,10 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     phone,
     role: 'volunteer',
     isApproved: false,
-    mailingAddress
+    mailingAddress,
+    profilePictureUrl
   });
   console.log('User created:', { id: user._id, email: user.email });
-
-  // Handle uploaded files
-  let governmentIdUrl = '';
-  let drivingLicenseUrl = '';
-
-  // Check for files in req.files (multipart upload)
-  if (req.files) {
-    console.log('Files received:', Object.keys(req.files));
-    if (req.files.governmentId) {
-      governmentIdUrl = req.files.governmentId[0].path;
-      console.log('Stored government ID url:', governmentIdUrl);
-    }
-    if (req.files.drivingLicense) {
-      drivingLicenseUrl = req.files.drivingLicense[0].path;
-      console.log('Stored driving license url:', drivingLicenseUrl);
-    }
-  } else {
-    console.log('No files uploaded via multipart.');
-  }
-
-  // Check for file paths in req.body (string paths or base64 from mobile app)
-  // Mobile apps should send images as base64 data URLs: "data:image/jpeg;base64,/9j/4AAQ..."
-  const { governmentId, drivingLicense } = req.body;
-  if (governmentId && typeof governmentId === 'string' && !governmentIdUrl) {
-    console.log('Processing government ID:', governmentId.substring(0, 50) + '...');
-    try {
-      // Check if it's a base64 data URL
-      if (governmentId.startsWith('data:image/')) {
-        const result = await cloudinary.uploader.upload(governmentId, {
-          folder: 'volunteer-documents',
-          resource_type: 'auto',
-          quality: 'auto',
-        });
-        governmentIdUrl = result.secure_url;
-        console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
-      } else if (governmentId.startsWith('http')) {
-        // Already a URL
-        governmentIdUrl = governmentId;
-        console.log('Government ID URL provided:', governmentIdUrl);
-      } else {
-        // Assume it's a local path that needs to be uploaded
-        console.log('Attempting to upload government ID from local path:', governmentId);
-        const result = await cloudinary.uploader.upload(governmentId, {
-          folder: 'volunteer-documents',
-          resource_type: 'auto',
-          quality: 'auto',
-        });
-        governmentIdUrl = result.secure_url;
-        console.log('Government ID uploaded to Cloudinary:', governmentIdUrl);
-      }
-    } catch (error) {
-      console.error('Error processing government ID:', error.message);
-      // Don't fail registration, just log the error
-    }
-  }
-
-  if (drivingLicense && typeof drivingLicense === 'string' && !drivingLicenseUrl) {
-    console.log('Processing driving license:', drivingLicense.substring(0, 50) + '...');
-    try {
-      // Check if it's a base64 data URL
-      if (drivingLicense.startsWith('data:image/')) {
-        const result = await cloudinary.uploader.upload(drivingLicense, {
-          folder: 'volunteer-documents',
-          resource_type: 'auto',
-          quality: 'auto',
-        });
-        drivingLicenseUrl = result.secure_url;
-        console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
-      } else if (drivingLicense.startsWith('http')) {
-        // Already a URL
-        drivingLicenseUrl = drivingLicense;
-        console.log('Driving license URL provided:', drivingLicenseUrl);
-      } else {
-        // Assume it's a local path that needs to be uploaded
-        console.log('Attempting to upload driving license from local path:', drivingLicense);
-        const result = await cloudinary.uploader.upload(drivingLicense, {
-          folder: 'volunteer-documents',
-          resource_type: 'auto',
-          quality: 'auto',
-        });
-        drivingLicenseUrl = result.secure_url;
-        console.log('Driving license uploaded to Cloudinary:', drivingLicenseUrl);
-      }
-    } catch (error) {
-      console.error('Error processing driving license:', error.message);
-      // Don't fail registration, just log the error
-    }
-  }
 
   // Create Volunteer Profile
   console.log('Creating volunteer profile...');
@@ -260,6 +249,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     },
     governmentIdUrl,
     drivingLicenseUrl,
+    profilePictureUrl,
     backgroundCheckStatus: 'Pending'
   });
   console.log('Volunteer profile created:', { id: profile._id, userId: profile.userId });
@@ -279,7 +269,8 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     },
     profile: {
       governmentIdUrl: profile.governmentIdUrl || '',
-      drivingLicenseUrl: profile.drivingLicenseUrl || ''
+      drivingLicenseUrl: profile.drivingLicenseUrl || '',
+      profilePictureUrl: profile.profilePictureUrl || ''
     }
   });
 });

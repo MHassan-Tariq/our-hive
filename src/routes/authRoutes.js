@@ -93,6 +93,7 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               availability: { type: string, description: "JSON object string" }
  *               governmentId: { type: string, description: "File upload or base64 data URL" }
  *               drivingLicense: { type: string, description: "File upload or base64 data URL" }
+ *               profilePicture: { type: string, description: "File upload or base64 data URL" }
  *         application/json:
  *           schema:
  *             type: object
@@ -107,6 +108,7 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               availability: { type: object }
  *               governmentId: { type: string, description: "Base64 data URL for mobile apps" }
  *               drivingLicense: { type: string, description: "Base64 data URL for mobile apps" }
+ *               profilePicture: { type: string, description: "Base64 data URL for mobile apps" }
  *     responses:
  *       201:
  *         description: Volunteer registered and pending approval. Response contains `token`, `user` object, and `profile` with document URLs if uploaded.
@@ -116,6 +118,7 @@ router.post(
   require('../middleware/uploadMiddleware').fields([
     { name: 'governmentId', maxCount: 1 },
     { name: 'drivingLicense', maxCount: 1 },
+    { name: 'profilePicture', maxCount: 1 },
   ]),
   volunteerRegister
 );
