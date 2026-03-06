@@ -43,6 +43,11 @@ const {
   adminUpdatePassword,
   adminUploadAgreement,
   adminDeletePartner,
+  adminListBadges,
+  adminGetBadge,
+  adminCreateBadge,
+  adminUpdateBadge,
+  adminDeleteBadge,
 } = require('../controllers/adminController');
 
 // All routes here are admin only
@@ -1105,5 +1110,65 @@ router.get('/sponsors/:id', adminGetSponsor);
  *         description: Sponsor status updated
  */
 router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
+
+/**
+ * @swagger
+ * /api/admin/badges:
+ *   get:
+ *     summary: List all badges
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of badges retrieved
+ *   post:
+ *     summary: Create a new badge
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Badge created
+ */
+router.get('/badges', adminListBadges);
+router.post('/badges', upload.single('badgeImage'), adminCreateBadge);
+
+/**
+ * @swagger
+ * /api/admin/badges/{id}:
+ *   get:
+ *     summary: Get single badge detail
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Badge detail retrieved
+ *   patch:
+ *     summary: Update a badge
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Badge updated
+ *   delete:
+ *     summary: Delete a badge
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Badge deleted
+ */
+router.get('/badges/:id', adminGetBadge);
+router.patch('/badges/:id', upload.single('badgeImage'), adminUpdateBadge);
+router.delete('/badges/:id', adminDeleteBadge);
 
 module.exports = router;

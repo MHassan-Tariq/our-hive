@@ -8,6 +8,7 @@ const Opportunity = require('../models/Opportunity');
 const Campaign = require('../models/Campaign');
 const MonetaryDonation = require('../models/MonetaryDonation');
 const SystemSettings = require('../models/SystemSettings');
+const Badge = require('../models/Badge');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
@@ -1485,6 +1486,105 @@ const adminDeactivateSponsor = asyncHandler(async (req, res, next) => {
   });
 });
 
+/**
+ * @desc    Get all badges
+ * @route   GET /api/admin/badges
+ * @access  Private (Admin only)
+ */
+const adminListBadges = asyncHandler(async (req, res, next) => {
+  const badges = await Badge.find().sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    count: badges.length,
+    data: badges,
+  });
+});
+
+/**
+ * @desc    Get single badge
+ * @route   GET /api/admin/badges/:id
+ * @access  Private (Admin only)
+ */
+const adminGetBadge = asyncHandler(async (req, res, next) => {
+  const badge = await Badge.findById(req.params.id);
+
+  if (!badge) {
+    return next(new ErrorResponse('Badge not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: badge,
+  });
+});
+
+/**
+ * @desc    Create a badge
+ * @route   POST /api/admin/badges
+ * @access  Private (Admin only)
+ */
+const adminCreateBadge = asyncHandler(async (req, res, next) => {
+  const badgeData = { ...req.body };
+
+  if (req.file) {
+    badgeData.imageUrl = req.file.path || req.file.secure_url || req.file.url;
+  }
+
+  const badge = await Badge.create(badgeData);
+
+  res.status(201).json({
+    success: true,
+    data: badge,
+  });
+});
+
+/**
+ * @desc    Update a badge
+ * @route   PATCH /api/admin/badges/:id
+ * @access  Private (Admin only)
+ */
+const adminUpdateBadge = asyncHandler(async (req, res, next) => {
+  const badgeData = { ...req.body };
+
+  if (req.file) {
+    badgeData.imageUrl = req.file.path || req.file.secure_url || req.file.url;
+  }
+
+  const badge = await Badge.findByIdAndUpdate(req.params.id, badgeData, {
+    new: true,
+    runValidators: true,
+  });
+
+  if (!badge) {
+    return next(new ErrorResponse('Badge not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: badge,
+  });
+});
+
+/**
+ * @desc    Delete a badge
+ * @route   DELETE /api/admin/badges/:id
+ * @access  Private (Admin only)
+ */
+const adminDeleteBadge = asyncHandler(async (req, res, next) => {
+  const badge = await Badge.findByIdAndDelete(req.params.id);
+
+  if (!badge) {
+    return next(new ErrorResponse('Badge not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Badge deleted successfully',
+    data: {},
+  });
+});
+
 module.exports = { 
   getAllUsers, 
   getDashboard, 
@@ -1526,4 +1626,9 @@ module.exports = {
   adminUpdatePassword,
   adminUploadAgreement,
   adminDeletePartner,
+  adminListBadges,
+  adminGetBadge,
+  adminCreateBadge,
+  adminUpdateBadge,
+  adminDeleteBadge,
 };
