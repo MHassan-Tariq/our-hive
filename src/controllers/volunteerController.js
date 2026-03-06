@@ -3,6 +3,7 @@ const Opportunity = require('../models/Opportunity');
 const ActivityLog = require('../models/ActivityLog');
 const VolunteerLog = require('../models/VolunteerLog');
 const Badge = require('../models/Badge');
+const User = require('../models/User');
 const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 const cloudinary = require('../utils/cloudinary');
@@ -304,7 +305,7 @@ const assignBadges = async (profile) => {
   for (const badge of allBadges) {
     // Parse timeRequired to handle both string and number types
     const badgeHoursRequired = parseTimeRequired(badge.timeRequired);
-    
+
     if (profile.totalHours >= badgeHoursRequired) {
       const hasBadge = profile.badges.some((b) => b.name === badge.title);
       if (!hasBadge) {
@@ -333,115 +334,115 @@ const assignBadges = async (profile) => {
 };
 
 const logHours = async (req, res) => {
-    try {
-      // allow opportunity ID from either route param or body
-      const opportunityId = req.params.id || req.body.opportunityId;
-const { date, startTime, endTime, category: incomingCategory, notes, hours: manualHours } = req.body;
-const category = incomingCategory || 'General Volunteering';
-      // if opportunityId is present, validate it and ensure user participated
-      let opportunity;
-      if (opportunityId) {
-        if (!mongoose.Types.ObjectId.isValid(opportunityId)) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid opportunity ID',
-          });
-        }
-        opportunity = await Opportunity.findById(opportunityId);
-        if (!opportunity) {
-          return res.status(404).json({
-            success: false,
-            message: 'Opportunity not found',
-          });
-        }
-        const userIdStr = req.user._id.toString();
-        const isAttendee = (opportunity.attendees || [])
-          .some((id) => id.toString() === userIdStr) ||
-          (opportunity.checkedInUsers || [])
-          .some((id) => id.toString() === userIdStr);
-        if (!isAttendee) {
-          return res.status(403).json({
-            success: false,
-            message: 'You must join or check-in before logging hours for this opportunity.',
-          });
-        }
-      }
-
-      let totalHours = manualHours;
-      // If start/end times provided, calculate duration (simple version)
-      if (!totalHours && startTime && endTime) {
-        const start = new Date(`2000-01-01 ${startTime}`);
-        const end = new Date(`2000-01-01 ${endTime}`);
-        totalHours = (end - start) / (1000 * 60 * 60);
-        if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
-      }
-
-      if (!totalHours || totalHours <= 0) {
+  try {
+    // allow opportunity ID from either route param or body
+    const opportunityId = req.params.id || req.body.opportunityId;
+    const { date, startTime, endTime, category: incomingCategory, notes, hours: manualHours } = req.body;
+    const category = incomingCategory || 'General Volunteering';
+    // if opportunityId is present, validate it and ensure user participated
+    let opportunity;
+    if (opportunityId) {
+      if (!mongoose.Types.ObjectId.isValid(opportunityId)) {
         return res.status(400).json({
           success: false,
-          message: 'Please provide valid hours or start/end times.',
+          message: 'Invalid opportunity ID',
         });
       }
-
-      // 1. Create the structured log
-      await VolunteerLog.create({
-        userId: req.user._id,
-        date: date || new Date(),
-        startTime,
-        endTime,
-        category,
-        notes,
-        hoursLogged: totalHours,
-        opportunityId: opportunityId || null,
-      });
-
-      // 2. Update the profile totals
-      let profile = await VolunteerProfile.findOne({ userId: req.user._id });
-      if (!profile) {
-        profile = new VolunteerProfile({ userId: req.user._id });
-      }
-
-      profile.totalHours += totalHours;
-      profile.hoursThisYear += totalHours;
-
-      // Award badges based on total hours
-      const newBadges = await assignBadges(profile);
-
-      await profile.save();
-
-      // if we logged hours for an opportunity, record an activity for the organizer
-      if (opportunity) {
-        await ActivityLog.create({
-          userId: opportunity.partnerId,
-          type: 'Volunteer Hours Logged',
-          content: `${req.user.firstName} logged ${totalHours} hours for "${opportunity.title}".`,
-          relatedId: opportunity._id,
-          relatedModel: 'Opportunity',
+      opportunity = await Opportunity.findById(opportunityId);
+      if (!opportunity) {
+        return res.status(404).json({
+          success: false,
+          message: 'Opportunity not found',
         });
       }
-
-      const responseData = {
-        totalHours: profile.totalHours,
-        hoursThisYear: profile.hoursThisYear,
-        logged: totalHours,
-      };
-      if (opportunity) {
-        responseData.opportunity = {
-          _id: opportunity._id,
-          title: opportunity.title,
-        };
+      const userIdStr = req.user._id.toString();
+      const isAttendee = (opportunity.attendees || [])
+        .some((id) => id.toString() === userIdStr) ||
+        (opportunity.checkedInUsers || [])
+          .some((id) => id.toString() === userIdStr);
+      if (!isAttendee) {
+        return res.status(403).json({
+          success: false,
+          message: 'You must join or check-in before logging hours for this opportunity.',
+        });
       }
-
-      res.status(200).json({
-        success: true,
-        message: 'Hours logged successfully.',
-        data: responseData,
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ success: false, message: 'Server error' });
     }
-  };
+
+    let totalHours = manualHours;
+    // If start/end times provided, calculate duration (simple version)
+    if (!totalHours && startTime && endTime) {
+      const start = new Date(`2000-01-01 ${startTime}`);
+      const end = new Date(`2000-01-01 ${endTime}`);
+      totalHours = (end - start) / (1000 * 60 * 60);
+      if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
+    }
+
+    if (!totalHours || totalHours <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide valid hours or start/end times.',
+      });
+    }
+
+    // 1. Create the structured log
+    await VolunteerLog.create({
+      userId: req.user._id,
+      date: date || new Date(),
+      startTime,
+      endTime,
+      category,
+      notes,
+      hoursLogged: totalHours,
+      opportunityId: opportunityId || null,
+    });
+
+    // 2. Update the profile totals
+    let profile = await VolunteerProfile.findOne({ userId: req.user._id });
+    if (!profile) {
+      profile = new VolunteerProfile({ userId: req.user._id });
+    }
+
+    profile.totalHours += totalHours;
+    profile.hoursThisYear += totalHours;
+
+    // Award badges based on total hours
+    const newBadges = await assignBadges(profile);
+
+    await profile.save();
+
+    // if we logged hours for an opportunity, record an activity for the organizer
+    if (opportunity) {
+      await ActivityLog.create({
+        userId: opportunity.partnerId,
+        type: 'Volunteer Hours Logged',
+        content: `${req.user.firstName} logged ${totalHours} hours for "${opportunity.title}".`,
+        relatedId: opportunity._id,
+        relatedModel: 'Opportunity',
+      });
+    }
+
+    const responseData = {
+      totalHours: profile.totalHours,
+      hoursThisYear: profile.hoursThisYear,
+      logged: totalHours,
+    };
+    if (opportunity) {
+      responseData.opportunity = {
+        _id: opportunity._id,
+        title: opportunity.title,
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Hours logged successfully.',
+      data: responseData,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
 
 /**
  * @desc    Get history of logged hours
@@ -475,7 +476,7 @@ const getBadgeDetails = async (req, res) => {
     }
 
     const badge = profile.badges.id(req.params.badgeId) || profile.badges.find(b => b.badgeId === req.params.badgeId);
-    
+
     if (!badge) {
       return res.status(404).json({ success: false, message: 'Badge not found' });
     }
@@ -501,6 +502,8 @@ const saveProfile = async (req, res) => {
       profilePictureUrl,
       location,
       backgroundCheckStatus,
+      mailingAddress,
+      email,
     } = req.body;
     // Handle stringified skills
     if (typeof skills === 'string') {
@@ -591,6 +594,22 @@ const saveProfile = async (req, res) => {
       });
     }
 
+    // Update User record with mailingAddress and email if provided (for both new and existing profiles)
+    if (mailingAddress !== undefined) {
+      await User.findByIdAndUpdate(req.user._id, { mailingAddress });
+    }
+    if (email && email !== req.user.email) {
+      // Check if new email is already taken
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser && existingUser._id.toString() !== req.user._id.toString()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already in use by another account',
+        });
+      }
+      await User.findByIdAndUpdate(req.user._id, { email: email.toLowerCase() });
+    }
+
     res.status(200).json({ success: true, data: profile });
   } catch (err) {
     console.error(err);
@@ -617,7 +636,7 @@ const getProfile = async (req, res) => {
     profileData.profilePictureUrl = profileData.profilePictureUrl || '';
     profileData.email = req.user.email;
     profileData.volunteerSince = req.user.createdAt;
-    profileData.mailingAddress = req.user.mailingAddress || profile.mailingAddress;
+    profileData.mailingAddress = req.user.mailingAddress || '';
     profileData.phone = req.user.phone || profile.phone;
     profileData.firstName = req.user.firstName;
     profileData.lastName = req.user.lastName;
@@ -743,7 +762,7 @@ const uploadVolunteerDocs = async (req, res) => {
 const reassignBadges = async (req, res) => {
   try {
     const userId = req.params.userId || req.user._id;
-    
+
     // Verification: user can reassign for themselves or admin can reassign for anyone
     if (req.user._id.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({

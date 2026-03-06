@@ -168,6 +168,8 @@ router.get('/logs', getLogHistory);
  *               profilePictureUrl: { type: string }
  *               location: { type: string, example: "New York, NY" }
  *               backgroundCheckStatus: { type: string, enum: ['Not Started', 'Pending', 'Verified', 'Action Required'] }
+ *               mailingAddress: { type: string, example: "123 Main St, City, State, ZIP" }
+ *               email: { type: string, format: email, example: "jane@ourhive.com" }
  *     responses:
  *       200:
  *         description: Profile saved successfully. Returned object includes `profilePictureUrl`.

@@ -91,8 +91,8 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: string, description: "JSON array or comma-separated string" }
  *               availability: { type: string, description: "JSON object string" }
- *               governmentId: { type: string, description: "File upload (multipart) or base64 data URL (data:image/...)" }
- *               drivingLicense: { type: string, description: "File upload (multipart) or base64 data URL (data:image/...)" }
+ *               governmentId: { type: string, description: "File upload or base64 data URL" }
+ *               drivingLicense: { type: string, description: "File upload or base64 data URL" }
  *         application/json:
  *           schema:
  *             type: object
@@ -104,9 +104,9 @@ const { register, login, logout, checkAvailability, forgotPassword, resetPasswor
  *               phone: { type: string, example: "(555) 000-0000" }
  *               mailingAddress: { type: string, example: "123 Kindness Way, City, State, ZIP" }
  *               skills: { type: array, items: { type: string } }
- *               availability: { type: object, properties: { morning: { type: boolean }, afternoon: { type: boolean }, evenings: { type: boolean }, weekend: { type: boolean } } }
- *               governmentId: { type: string, description: "Base64 data URL (data:image/...) for mobile apps" }
- *               drivingLicense: { type: string, description: "Base64 data URL (data:image/...) for mobile apps" }
+ *               availability: { type: object }
+ *               governmentId: { type: string, description: "Base64 data URL for mobile apps" }
+ *               drivingLicense: { type: string, description: "Base64 data URL for mobile apps" }
  *     responses:
  *       201:
  *         description: Volunteer registered and pending approval. Response contains `token`, `user` object, and `profile` with document URLs if uploaded.
