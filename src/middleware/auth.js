@@ -82,4 +82,38 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+/**
+ * Optional protect — similar to protect but doesn't return 401 when
+ * no token is provided. If a valid token is present it will attach the
+ * user; otherwise it simply calls next(). This enables public routes to
+ * still know about the caller when authenticated.
+ */
+const optionalProtect = async (req, res, next) => {
+  let token;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer ')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next(); // continue without attaching a user
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    if (user) {
+      req.user = user;
+    }
+  } catch (err) {
+    // ignore errors; treat as unauthenticated
+    console.log('optionalProtect: token invalid, continuing as guest');
+  }
+
+  next();
+};
+
+module.exports = { protect, authorize, optionalProtect };

@@ -168,9 +168,6 @@ exports.getDistributionSchedule = async (req, res) => {
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-        { specificLocation: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } }
       ];
     }
 
@@ -323,8 +320,17 @@ exports.getOpportunityDetails = async (req, res) => {
     const publicOpportunity = opportunity.toObject();
 
     // Check if current user is registered
-    const currentUserId = req.user ? req.user.id : null;
-    publicOpportunity.isRegistered = currentUserId ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString()) : false;
+    const currentUserId = req.user ? req.user._id : null;
+    publicOpportunity.isRegistered = currentUserId
+      ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString())
+      : false;
+
+    // Count donors among attendees for public response
+    const donors = await User.find({
+      _id: { $in: publicOpportunity.attendees },
+      role: 'donor'
+    });
+    publicOpportunity.totalDonors = donors.length;
 
     // Fetch Partner Details if applicable
     if (publicOpportunity.partnerId) {

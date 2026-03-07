@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getStats, getHives, getOpportunities, getOpportunityDetails, getDistributionSchedule, getCampaigns, getAboutUs, getContactInfo, getUserRoles, getMissionStats } = require('../controllers/publicController');
+const { optionalProtect } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -206,7 +207,8 @@ router.get('/opportunities', getOpportunities);
  *       404:
  *         description: Opportunity not found
  */
-router.get('/opportunities/:id', getOpportunityDetails);
+// apply optionalProtect so authenticated visitors will still have their user attached
+router.get('/opportunities/:id', optionalProtect, getOpportunityDetails);
 
 /**
  * @swagger

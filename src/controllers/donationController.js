@@ -52,42 +52,88 @@ const getDonorDashboard = asyncHandler(async (req, res, next) => {
  */
 const offerItem = asyncHandler(async (req, res, next) => {
   let {
+    title,
     itemName,
     itemCategory,
     description,
     image,
-    pickupAddress,
     quantity,
     estimatedValue,
     deliveryMethod,
     additionalNotes,
-    petInfo
+    petInfo,
+    value,
+    delivery_method,
+    address,   // client sends this instead of pickupAddress
+    notes,
+    has_cat,
+    has_dog
   } = req.body;
 
-  // Handle file upload
-  if (req.file) {
-    image = req.file.path;
+  // Map alternative names to internal ones
+  if (value !== undefined && estimatedValue === undefined) estimatedValue = value;
+  if (delivery_method && !deliveryMethod) deliveryMethod = delivery_method;
+  if (notes && !additionalNotes) additionalNotes = notes;
+
+  // Internal field name
+  let pickupAddress = address ? address.toString().trim() : '';
+
+  // Validate address
+  if (!pickupAddress) return next(new ErrorResponse('address is required', 400));
+
+  // Normalize booleans
+  function toBool(val) {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'number') return val === 1;
+    if (typeof val === 'string') {
+      const lower = val.toLowerCase();
+      return lower === '1' || lower === 'true' || lower === 'yes';
+    }
+    return false;
   }
 
-  // Handle stringified objects from multipart/form-data
-  if (typeof pickupAddress === 'string') {
-    try {
-      pickupAddress = JSON.parse(pickupAddress);
-    } catch (e) { }
+  if ((has_cat !== undefined || has_dog !== undefined) && !petInfo) {
+    petInfo = {
+      hasCat: toBool(has_cat),
+      hasDog: toBool(has_dog)
+    };
+  } else if (petInfo) {
+    petInfo.hasCat = toBool(petInfo.hasCat);
+    petInfo.hasDog = toBool(petInfo.hasDog);
   }
+
+  // Set defaults
+  if (!title) title = itemName || description ? (description.substring(0, 30) + '...') : 'In-Kind Donation';
+  if (!itemName) itemName = description ? description.substring(0, 50) : 'In-Kind Donation';
+  if (!itemCategory) itemCategory = 'Other';
+
+  // Basic validation
+  if (!title || !itemName || !itemCategory || !description) {
+    return next(new ErrorResponse('title, itemName, itemCategory and description are required', 400));
+  }
+
+  if (!deliveryMethod) return next(new ErrorResponse('deliveryMethod is required', 400));
+
+  // Handle file upload
+  if (req.file) image = req.file.path;
+
+  // parse petInfo if stringified
   if (typeof petInfo === 'string') {
     try {
       petInfo = JSON.parse(petInfo);
     } catch (e) { }
   }
 
+  // Create donation
   const donation = await InKindDonation.create({
     donorId: req.user._id,
+    title,
     itemName,
     itemCategory,
     description,
     image,
-    pickupAddress,
+    pickupAddress, // now a simple string
     quantity,
     estimatedValue,
     deliveryMethod,
@@ -101,7 +147,6 @@ const offerItem = asyncHandler(async (req, res, next) => {
     data: donation,
   });
 });
-
 /**
  * @desc    Get all donations posted by the logged-in donor
  * @route   GET /api/donations/my-donations
@@ -406,9 +451,16 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('In-kind donation not found', 404));
   }
 
+  const donationData = donation.toObject();
+
+  // Convert status to lowercase
+  if (donationData.status) {
+    donationData.status = donationData.status.toLowerCase();
+  }
+
   res.status(200).json({
     success: true,
-    data: donation,
+    data: donationData,
   });
 });
 

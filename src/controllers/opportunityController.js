@@ -1,7 +1,9 @@
 const Opportunity = require('../models/Opportunity');
 const VolunteerProfile = require('../models/VolunteerProfile');
+const DonorProfile = require('../models/DonorProfile');
 const ActivityLog = require('../models/ActivityLog');
 const PartnerProfile = require('../models/PartnerProfile');
+const User = require('../models/User');
 const mongoose = require('mongoose'); 
 
 /**
@@ -88,6 +90,12 @@ const joinEvent = async (req, res) => {
         { $addToSet: { joinedOpportunities: opportunity._id } },
         { upsert: true }
       );
+    } else if (req.user.role === 'donor') {
+      await DonorProfile.findOneAndUpdate(
+        { userId },
+        { $addToSet: { joinedEvents: opportunity._id } },
+        { upsert: true }
+      );
     }
 
     // Impact log for the organizer (partner)
@@ -171,6 +179,13 @@ const getEventDetails = async (req, res) => {
       0,
       (eventData.requiredVolunteers || 0) - eventData.totalAttendees
     );
+
+    // ✅ 3️⃣.5️⃣ Count donors among attendees
+    const donors = await User.find({
+      _id: { $in: eventData.attendees },
+      role: 'donor'
+    });
+    eventData.totalDonors = donors.length;
 
     // ✅ 4️⃣ Registration status (handle unauthenticated safely)
     const userId = req.user?._id;

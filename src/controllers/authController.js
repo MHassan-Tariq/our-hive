@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const Sponsor = require('../models/Sponsor');
+const DonorProfile = require('../models/DonorProfile');
 const ParticipantProfile = require('../models/ParticipantProfile');
 const PartnerProfile = require('../models/PartnerProfile');
 const ErrorResponse = require('../utils/errorResponse');
@@ -29,7 +30,7 @@ const sendTokenResponse = (user, statusCode, res) => {
 
 const register = asyncHandler(async (req, res, next) => {
   let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability } = req.body;
-
+console.log('Received registration data:', req.body);
   // Handle single "fullName" field from UI if firstName/lastName missing
   if (fullName && (!firstName || !lastName)) {
     const parts = fullName.trim().split(' ');
@@ -79,6 +80,9 @@ const register = asyncHandler(async (req, res, next) => {
       break;
     case 'sponsor':
       await Sponsor.create({ userId: user._id });
+      break;
+    case 'donor':
+      await DonorProfile.create({ userId: user._id ,isApproved: true});
       break;
     case 'participant':
       await ParticipantProfile.create({ userId: user._id });

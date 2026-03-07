@@ -20,6 +20,10 @@ const DonorProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    joinedEvents: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Opportunity',
+    }],
   },
   {
     timestamps: true,

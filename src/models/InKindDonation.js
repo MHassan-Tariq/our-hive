@@ -7,10 +7,21 @@ const InKindDonationSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    title: {
+      type: String,
+      required: [true, 'Donation title is required'],
+      trim: true,
+      maxlength: [150, 'Title cannot be more than 150 characters']
+    },
     refId: {
       type: String,
       unique: true,
-      // e.g. OH-8821
+      // e.g. OH-8821 (legacy internal ref)
+    },
+    donationId: {
+      type: String,
+      unique: true,
+      // public-facing code like "don-672"
     },
     itemName: {
       type: String,
@@ -39,10 +50,10 @@ const InKindDonationSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    pickupAddress: {
-      street: { type: String, trim: true, required: [true, 'Street is required for pickup'] },
-      city: { type: String, trim: true, required: [true, 'City is required for pickup'] },
-      zip: { type: String, trim: true },
+  pickupAddress: {
+      type: String,
+      trim: true,
+      required: [true, 'Address is required for pickup'],
     },
     estimatedValue: {
       type: String,
@@ -104,11 +115,24 @@ const InKindDonationSchema = new mongoose.Schema(
   }
 );
 
-// Pre-save hook to generate refId like OH-XXXX
+// Pre-save hook to generate refId and donationId
 InKindDonationSchema.pre('save', async function () {
   if (!this.refId) {
     const random = Math.floor(1000 + Math.random() * 9000);
     this.refId = `OH-${random}`;
+  }
+
+  if (!this.donationId) {
+    // attempt until unique (should rarely loop)
+    let code;
+    let exists = true;
+    while (exists) {
+      const num = Math.floor(100 + Math.random() * 900); // three digits
+      code = `don-${num}`;
+      // check database for collision
+      exists = await mongoose.models.InKindDonation.findOne({ donationId: code });
+    }
+    this.donationId = code;
   }
 });
 
