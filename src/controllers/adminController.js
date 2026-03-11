@@ -1257,6 +1257,23 @@ const adminGetSettings = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Get social links from system settings
+ * @route   GET /api/admin/settings/social-links
+ * @access  Public
+ */
+const getSocialLinks = asyncHandler(async (req, res, next) => {
+  let settings = await SystemSettings.findOne();
+  if (!settings) {
+    settings = await SystemSettings.create({});
+  }
+  
+  res.status(200).json({
+    success: true,
+    data: settings.socialLinks
+  });
+});
+
+/**
  * @desc    Update system settings
  * @route   PATCH /api/admin/settings
  * @access  Private (Admin only)
@@ -1620,6 +1637,7 @@ module.exports = {
   adminDeactivateSponsor,
   adminDeleteSponsor,
   adminGetSettings,
+  getSocialLinks,
   adminUpdateSettings,
   adminGetProfile,
   adminUpdateProfile,

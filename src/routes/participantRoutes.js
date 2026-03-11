@@ -12,7 +12,9 @@ const {
   uploadDocument,
   sendVerificationCode,
   verifyCode,
-  getPantries
+  getPantries,
+  completeIntakeSubmission
+
 } = require('../controllers/participantController');
 
 router.use(protect);
@@ -22,78 +24,67 @@ router.use(authorize('participant'));
  * @swagger
  * /api/participant/profile:
  *   post:
- *     summary: Save or update participant profile
- *     description: Saves participant interests and residence area.
+ *     summary: Save or update comprehensive participant profile
+ *     description: Updates all participant information including personal, address, household, income, documents, and assistance programs.
  *     tags: [Participants]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             properties:
- *               firstName: { type: string }
- *               lastName: { type: string }
- *               phone: { type: string }
- *               interests:
- *                 type: array
- *                 items:
- *                   type: string
- *                 example: ["Food Security", "Health"]
- *               residenceArea:
- *                 type: string
- *                 example: "Clifton, Karachi"
- *               housingStatus:
- *                 type: string
- *                 enum: ['Housed', 'Unhoused', 'Shelter', 'Transitional Housing', 'At Risk of Homelessness']
- *               address:
- *                 type: object
- *                 properties:
- *                   street: { type: string }
- *                   unit: { type: string }
- *                   city: { type: string }
- *                   state: { type: string }
- *                   zipCode: { type: string }
- *               unhousedDetails:
- *                 type: object
- *                 properties:
- *                   crossStreets: { type: string }
- *                   nearbyBusiness: { type: string }
- *                   landmark: { type: string }
- *                   city: { type: string }
- *                   zipCode: { type: string }
+ *               firstName: { type: string, example: "Jane" }
+ *               lastName: { type: string, example: "Doe" }
+ *               email: { type: string, example: "jane@example.com" }
+ *               phone: { type: string, example: "(555) 123-4567" }
+ *               dateOfBirth: { type: string, format: date, example: "1990-05-15" }
+ *               gender: { type: string, enum: ['Male', 'Female', 'Non-Binary', 'Prefer not to say'] }
+ *               race: { type: string, example: "African American" }
+ *               ethnicity: { type: string, example: "Hispanic" }
+ *               street: { type: string, example: "123 Main St" }
+ *               unit: { type: string, example: "Apt 4B" }
+ *               city: { type: string, example: "Los Angeles" }
+ *               state: { type: string, example: "CA" }
+ *               zipCode: { type: string, example: "90210" }
  *               householdSize: { type: integer, example: 4 }
  *               childrenCount: { type: integer, example: 2 }
  *               seniorsCount: { type: integer, example: 0 }
  *               petsCount: { type: integer, example: 1 }
- *               dietaryRestrictions: { type: array, items: { type: string, enum: ['Gluten-Free', 'Vegetarian', 'Vegan', 'Halal', 'Other'] } }
- *               isVeteran: { type: boolean }
- *               hasDisability: { type: boolean }
+ *               isVeteran: { type: boolean, example: false }
+ *               hasDisability: { type: boolean, example: false }
  *               monthlyIncome: { type: number, example: 2500 }
+ *               housingStatus: { type: string, enum: ['Housed', 'Unhoused', 'Shelter', 'Transitional Housing', 'At Risk of Homelessness'] }
+ *               assistancePrograms: { type: array, items: { type: string }, example: ["CalFresh", "Medi-Cal"] }
+ *               dietaryRestrictions: { type: array, items: { type: string }, example: ["Vegetarian"] }
  *               citizenStatus: { type: string, enum: ['Yes', 'No', 'Prefer not to say'] }
- *               assistancePrograms: { type: array, items: { type: string, enum: ['CalFresh', 'Medi-Cal', 'SSI', 'Other'] } }
  *               consentToInformationUse: { type: boolean }
+ *               isIntakeApproved: { type: boolean, example: true }
+ *               documents: { type: array, items: { type: string, format: binary }, description: "Up to 2 document files" }
+ *               documentType_0: { type: string, enum: ['ID', 'Proof of Residence', 'Proof of Income'], description: "Type of first document" }
+ *               documentType_1: { type: string, enum: ['ID', 'Proof of Residence', 'Proof of Income'], description: "Type of second document" }
  *     responses:
  *       200:
- *         description: Profile saved successfully.
+ *         description: Profile saved successfully
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 success: { type: boolean }
+ *                 message: { type: string }
  *                 data: { type: object }
  */
-router.post('/profile', saveProfile);
+router.post('/profile', upload.array('documents', 2), saveProfile);
 
 /**
  * @swagger
  * /api/participant/profile:
  *   get:
  *     summary: Get full participant profile
- *     description: Returns the unified user and participant profile data mapped for the frontend.
+ *     description: Returns the unified user and participant profile data including personal, address, household, income, and documents.
  *     tags: [Participants]
  *     security:
  *       - bearerAuth: []
@@ -116,8 +107,20 @@ router.post('/profile', saveProfile);
  *                         lastName: { type: string }
  *                         email: { type: string }
  *                         phone: { type: string }
+ *                         dateOfBirth: { type: string, format: date }
+ *                         gender: { type: string }
+ *                         race: { type: string }
+ *                         ethnicity: { type: string }
  *                         profilePictureUrl: { type: string }
  *                     participantId: { type: string }
+ *                     addressInfo:
+ *                       type: object
+ *                       properties:
+ *                         street: { type: string }
+ *                         unit: { type: string }
+ *                         city: { type: string }
+ *                         state: { type: string }
+ *                         zipCode: { type: string }
  *                     householdDetails:
  *                       type: object
  *                       properties:
@@ -125,19 +128,22 @@ router.post('/profile', saveProfile);
  *                         childrenCount: { type: integer }
  *                         seniorsCount: { type: integer }
  *                         petsCount: { type: integer }
- *                     address: { type: object }
+ *                         veteranStatus: { type: boolean }
+ *                         disability: { type: boolean }
+ *                     incomeAndHousing:
+ *                       type: object
+ *                       properties:
+ *                         annualIncome: { type: number }
+ *                         housingStatus: { type: string }
  *                     unhousedDetails: { type: object }
- *                     housingStatus: { type: string }
  *                     documents: { type: array }
+ *                     assistancePrograms: { type: array, items: { type: string } }
  *                     intakeStatus: { type: object }
  *                     interests: { type: array, items: { type: string } }
  *                     dietaryRestrictions: { type: array, items: { type: string } }
- *                     isVeteran: { type: boolean }
- *                     hasDisability: { type: boolean }
- *                     monthlyIncome: { type: number }
  *                     citizenStatus: { type: string }
- *                     assistancePrograms: { type: array, items: { type: string } }
  *                     consentToInformationUse: { type: boolean }
+ *                     isIntakeApproved: { type: boolean }
  */
 router.get('/profile', getParticipantProfile);
 
@@ -274,6 +280,59 @@ router.get('/dashboard', getParticipantDashboard);
  *         description: Intake step updated.
  */
 router.patch('/intake-step', submitIntakeStep);
+
+/**
+ * @swagger
+ * /api/participant/complete-intake:
+ *   post:
+ *     summary: Complete entire intake form in one submission
+ *     tags: [Participants]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, phone, housingStatus]
+ *             properties:
+ *               firstName: { type: string, example: "Jane" }
+ *               lastName: { type: string, example: "Doe" }
+ *               phone: { type: string, example: "(555) 123-4567" }
+ *               housingStatus: { type: string, enum: ["Housed", "Unhoused", "Shelter", "Transitional Housing", "At Risk of Homelessness"] }
+ *               address: 
+ *                 type: object
+ *                 properties:
+ *                   street: { type: string }
+ *                   unit: { type: string }
+ *                   city: { type: string }
+ *                   state: { type: string }
+ *                   zipCode: { type: string }
+ *               unhousedDetails:
+ *                 type: object
+ *                 properties:
+ *                   crossStreets: { type: string }
+ *                   nearbyBusiness: { type: string }
+ *                   landmark: { type: string }
+ *                   city: { type: string }
+ *                   zipCode: { type: string }
+ *               householdSize: { type: number, example: 3 }
+ *               childrenCount: { type: number, example: 1 }
+ *               seniorsCount: { type: number, example: 0 }
+ *               petsCount: { type: number, example: 0 }
+ *               dietaryRestrictions: { type: array, items: { type: string }, example: ["Gluten-Free", "Vegetarian"] }
+ *               isVeteran: { type: boolean, example: false }
+ *               hasDisability: { type: boolean, example: false }
+ *               monthlyIncome: { type: number, example: 1500 }
+ *               citizenStatus: { type: string, enum: ["Yes", "No", "Prefer not to say"], example: "Yes" }
+ *               assistancePrograms: { type: array, items: { type: string }, example: ["CalFresh", "Medi-Cal"] }
+ *               consentToInformationUse: { type: boolean, example: true }
+ *     responses:
+ *       200:
+ *         description: Intake form completed successfully.
+ */
+router.post('/complete-intake', completeIntakeSubmission);
 
 /**
  * @swagger

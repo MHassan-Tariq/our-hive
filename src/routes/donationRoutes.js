@@ -12,7 +12,8 @@ const {
   updateDonation,
   getAllDonations,
   getInKindDonationById,
-  ChangeDonationStatus
+  ChangeDonationStatus,
+  zeffyWebhook
 } = require('../controllers/donationController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -282,5 +283,40 @@ router.post('/:id/claim', authorize('volunteer'), claimDonation);
  *         description: List of assigned donations.
  */
 router.get('/assigned', authorize('partner'), getAssignedDonations);
+
+/**
+ * @swagger
+ * /api/donations/webhooks/zeffy:
+ *   post:
+ *     summary: Zeffy Payment Webhook Handler
+ *     description: Receives payment data from Zeffy via Zapier and processes donations
+ *     tags: [Webhooks]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [donor_email, amount, payment_status]
+ *             properties:
+ *               donation_id: { type: string, example: "zfy_123456" }
+ *               donor_email: { type: string, format: email, example: "donor@example.com" }
+ *               donor_name: { type: string, example: "John Smith" }
+ *               amount: { type: number, example: 100 }
+ *               currency: { type: string, example: "USD" }
+ *               transaction_date: { type: string, format: date-time }
+ *               campaign_id: { type: string }
+ *               campaign_name: { type: string, example: "Clean Water Initiative" }
+ *               payment_status: { type: string, enum: ["completed", "succeeded", "pending", "failed"] }
+ *               is_anonymous: { type: boolean, example: false }
+ *               organization_name: { type: string, example: "Acme Corp" }
+ *               recurring: { type: boolean, example: false }
+ *     responses:
+ *       200:
+ *         description: Payment processed successfully
+ *       400:
+ *         description: Invalid request data
+ */
+router.post('/webhooks/zeffy', zeffyWebhook);
 
 module.exports = router;

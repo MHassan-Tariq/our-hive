@@ -37,6 +37,7 @@ const {
   adminDeactivateSponsor,
   adminDeleteSponsor,
   adminGetSettings,
+  getSocialLinks,
   adminUpdateSettings,
   adminGetProfile,
   adminUpdateProfile,
@@ -932,8 +933,33 @@ router.delete('/sponsors/:id', adminDeleteSponsor);
  *     responses:
  *       200:
  *         description: Settings updated
+ *
+ * /api/admin/settings/social-links:
+ *   get:
+ *     summary: Get social media links
+ *     description: Returns social media links from system settings. Public endpoint for frontend display.
+ *     tags: [Admin Settings]
+ *     responses:
+ *       200:
+ *         description: Social links retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     facebook: { type: string, example: "https://facebook.com/ourhive" }
+ *                     instagram: { type: string, example: "https://instagram.com/ourhive" }
+ *                     twitter: { type: string, example: "https://twitter.com/ourhive" }
+ *                     linkedin: { type: string, example: "https://linkedin.com/company/ourhive" }
+ *                     youtube: { type: string, example: "https://youtube.com/@ourhive" }
+ *                     tiktok: { type: string, example: "https://tiktok.com/@ourhive" }
  */
 router.get('/settings', adminGetSettings);
+router.get('/settings/social-links', getSocialLinks);
 router.patch('/settings', adminUpdateSettings);
 
 /**

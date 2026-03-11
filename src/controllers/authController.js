@@ -9,10 +9,10 @@ const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
 
 // Helper to send token response
-const sendTokenResponse = (user, statusCode, res) => {
+const sendTokenResponse = async (user, statusCode, res) => {
   const token = user.getSignedJwtToken();
 
-  res.status(statusCode).json({
+  const responseData = {
     success: true,
     message: 'Login successful',
     token,
@@ -25,7 +25,17 @@ const sendTokenResponse = (user, statusCode, res) => {
       isApproved: user.isApproved,
       createdAt: user.createdAt,
     },
-  });
+  };
+
+  // For participant role, fetch and add intake approval status
+  if (user.role === 'participant') {
+    const participantProfile = await ParticipantProfile.findOne({ userId: user._id });
+    if (participantProfile) {
+      responseData.user.isIntakeApproved = participantProfile.isIntakeApproved;
+    }
+  }
+
+  res.status(statusCode).json(responseData);
 };
 
 const register = asyncHandler(async (req, res, next) => {
@@ -59,6 +69,7 @@ console.log('Received registration data:', req.body);
     password,
     phone,
     role: role || 'visitor',
+    isApproved: role === 'sponsor' ? true : false,
     mailingAddress,
   });
 
@@ -89,7 +100,7 @@ console.log('Received registration data:', req.body);
       break;
   }
 
-  sendTokenResponse(user, 201, res);
+  await sendTokenResponse(user, 201, res);
 });
 
 /**
@@ -280,6 +291,68 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Participant Registration
+ * @route   POST /api/auth/participant-register
+ * @access  Public
+ */
+const participantRegister = asyncHandler(async (req, res, next) => {
+  console.log('--- Participant Registration Started ---');
+  let { fullName, email, password, phone, mailingAddress } = req.body;
+  console.log('Received body:', req.body);
+
+  // Validate required fields
+  if (!fullName || !email || !password || !phone) {
+    return next(new ErrorResponse('Please provide fullName, email, password, and phone', 400));
+  }
+
+  // Handle single "fullName" field from UI
+  let firstName, lastName;
+  const parts = fullName.trim().split(' ');
+  firstName = parts[0] || '';
+  lastName = parts.slice(1).join(' ') || 'User';
+
+  // Check if email or phone already exists
+  console.log('Checking if email already exists:', email);
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    console.log('Email already exists:', email);
+    return next(new ErrorResponse('A user with that email already exists', 400));
+  }
+
+  console.log('Checking if phone already exists:', phone);
+  const existingPhone = await User.findOne({ phone });
+  if (existingPhone) {
+    console.log('Phone already exists:', phone);
+    return next(new ErrorResponse('A user with that phone number already exists', 400));
+  }
+
+  // Create user
+  console.log('Creating user...');
+  const user = await User.create({
+    firstName,
+    lastName,
+    email,
+    password,
+    phone,
+    role: 'participant',
+    mailingAddress,
+    isApproved: false, // Participants need approval
+  });
+
+  console.log('User created:', { id: user._id, email: user.email });
+
+  // Create Participant Profile
+  console.log('Creating participant profile...');
+  await ParticipantProfile.create({
+    userId: user._id,
+  });
+
+  console.log('Participant registration completed successfully');
+
+  await sendTokenResponse(user, 201, res);
+});
+
+/**
  * @desc    Consolidated Partner Registration
  * @route   POST /api/auth/partner-register
  * @access  Public
@@ -394,7 +467,7 @@ const login = asyncHandler(async (req, res, next) => {
   }
 
   // If the user is approved, send token response
-  sendTokenResponse(user, 200, res);
+  await sendTokenResponse(user, 200, res);
 });
 
 /**
@@ -517,7 +590,7 @@ const resetPassword = asyncHandler(async (req, res, next) => {
   user.resetPasswordExpire = undefined;
   await user.save();
 
-  sendTokenResponse(user, 200, res);
+  await sendTokenResponse(user, 200, res);
 });
 
-module.exports = { register, volunteerRegister, partnerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };
+module.exports = { register, volunteerRegister, participantRegister, partnerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };

@@ -8,6 +8,7 @@ const {
   getSponsorDashboard,
   getImpact,
   getCampaigns,
+  updatePersonalInfo,
   updateSponsorProfile,
 } = require('../controllers/sponsorController');
 
@@ -93,7 +94,7 @@ router.get('/campaigns', getCampaigns);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/dashboard', getSponsorDashboard);
+router.get('/profile', getSponsorDashboard);
 
 /**
  * @swagger
@@ -232,6 +233,31 @@ router.post('/donate', donate);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/impact', getImpact);
+
+/**
+ * @swagger
+ * /api/sponsor/account:
+ *   patch:
+ *     summary: Update sponsor personal information
+ *     tags: [Sponsors]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName: { type: string, example: "John" }
+ *               lastName: { type: string, example: "Doe" }
+ *               email: { type: string, format: email, example: "john@example.com" }
+ *               phone: { type: string, example: "(555) 123-4567" }
+ *               profilePictureUrl: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: Personal information updated.
+ */
+router.patch('/profile', upload.single('profilePictureUrl'), updatePersonalInfo);
 
 /**
  * @swagger
