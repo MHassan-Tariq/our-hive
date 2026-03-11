@@ -14,6 +14,7 @@ const {
   adminGetParticipant,
   adminUpdateParticipant,
   adminDeactivateParticipant,
+  adminRevokeDetailedIntake,
   adminExportParticipantsCSV,
   adminApproveParticipant,
   adminApproveDetailedIntake,
@@ -724,6 +725,7 @@ router.patch('/participants/:id', adminUpdateParticipant);
 router.patch('/participants/:id/deactivate', adminDeactivateParticipant);
 router.patch('/participants/:id/approve', adminApproveParticipant);
 router.patch('/participants/:id/approve-detailed', adminApproveDetailedIntake);
+router.patch('/participants/:id/revoke-detailed', adminRevokeDetailedIntake);
 
 /**
  * @swagger

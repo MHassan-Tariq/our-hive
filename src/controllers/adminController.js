@@ -436,11 +436,39 @@ const adminUpdateParticipant = asyncHandler(async (req, res, next) => {
 const adminDeactivateParticipant = asyncHandler(async (req, res, next) => {
   const profile = await ParticipantProfile.findByIdAndUpdate(
     req.params.id,
-    { accountStatus: 'INACTIVE' },
+    { 
+      accountStatus: 'INACTIVE',
+      isIntakeApproved: false,
+      'intakeStatus.status': 'Action Required'
+    },
     { new: true }
   );
   if (!profile) return next(new ErrorResponse('Participant not found', 404));
+
+  // Also reset the User approval flag
+  await User.findByIdAndUpdate(profile.userId, { isApproved: false });
+
   res.status(200).json({ success: true, message: 'Participant deactivated.', data: profile });
+});
+
+/**
+ * @desc    Revoke detailed intake approval
+ * @route   PATCH /api/admin/participants/:id/revoke-detailed
+ * @access  Private (Admin only)
+ */
+const adminRevokeDetailedIntake = asyncHandler(async (req, res, next) => {
+  const profile = await ParticipantProfile.findByIdAndUpdate(
+    req.params.id,
+    { 
+      accountStatus: 'PENDING',
+      isIntakeApproved: false,
+      'intakeStatus.status': 'Action Required'
+    },
+    { new: true }
+  );
+  if (!profile) return next(new ErrorResponse('Participant not found', 404));
+
+  res.status(200).json({ success: true, message: 'Detailed intake approval revoked.', data: profile });
 });
 
 /**
@@ -1692,6 +1720,7 @@ module.exports = {
   adminGetParticipant,
   adminUpdateParticipant,
   adminDeactivateParticipant,
+  adminRevokeDetailedIntake,
   adminExportParticipantsCSV,
   adminApproveParticipant,
   adminApproveDetailedIntake,
