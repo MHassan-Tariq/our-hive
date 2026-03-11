@@ -76,8 +76,11 @@ const getDashboard = asyncHandler(async (req, res, next) => {
   const roleCounts = ROLES.reduce((acc, role) => { acc[role] = 0; return acc; }, {});
   roleCountsArr.forEach(({ _id, count }) => { roleCounts[_id] = count; });
 
-  // Pending Approvals: partners awaiting approval
-  const pendingApprovalsCount = await User.countDocuments({ role: 'partner', isApproved: false });
+  // Pending Approvals: partners, volunteers, and participants awaiting approval
+  const pendingApprovalsCount = await User.countDocuments({ 
+    role: { $in: ['partner', 'volunteer', 'participant'] }, 
+    isApproved: false 
+  });
   // Pending Donations: in-kind donors without confirmed pickup
   const pendingDonationsCount = await User.countDocuments({ role: 'donor', isApproved: false });
   // Active Campaigns
@@ -1222,6 +1225,81 @@ const adminApproveVolunteer = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Approve or Disapprove a participant (Account Approval)
+ * @route   PATCH /api/admin/participants/:id/approve
+ * @access  Private (Admin only)
+ */
+const adminApproveParticipant = asyncHandler(async (req, res, next) => {
+  const { isApproved } = req.body;
+  
+  const profile = await ParticipantProfile.findByIdAndUpdate(
+    req.params.id,
+    { accountStatus: isApproved ? 'PENDING' : 'INACTIVE' },
+    { new: true, runValidators: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Participant profile not found', 404));
+  }
+
+  // Update User model
+  await User.findByIdAndUpdate(profile.userId, { isApproved });
+
+  // Activity Log
+  await ActivityLog.create({
+    userId: profile.userId,
+    type: 'Submission Approved',
+    content: isApproved ? 'Your participant account has been approved.' : 'Your participant account approval has been revoked.',
+    relatedId: profile._id,
+    relatedModel: 'ParticipantProfile',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Participant ${isApproved ? 'approved' : 'disapproved'} successfully.`,
+    data: profile
+  });
+});
+
+/**
+ * @desc    Approve Detailed Intake for a participant
+ * @route   PATCH /api/admin/participants/:id/approve-detailed
+ * @access  Private (Admin only)
+ */
+const adminApproveDetailedIntake = asyncHandler(async (req, res, next) => {
+  const profile = await ParticipantProfile.findByIdAndUpdate(
+    req.params.id,
+    {
+      'intakeStatus.status': 'Completed',
+      accountStatus: 'ACTIVE'
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!profile) {
+    return next(new ErrorResponse('Participant profile not found', 404));
+  }
+
+  // Also approve the user account when detailed intake is completed
+  await User.findByIdAndUpdate(profile.userId, { isApproved: true });
+
+  // Activity Log
+  await ActivityLog.create({
+    userId: profile.userId,
+    type: 'Profile Updated',
+    content: 'Your detailed intake information has been approved and your account is now fully active.',
+    relatedId: profile._id,
+    relatedModel: 'ParticipantProfile',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Detailed intake approved successfully.',
+    data: profile
+  });
+});
+
+/**
  * @desc    Delete an opportunity (event)
  * @route   DELETE /api/admin/events/:id
  * @access  Private (Admin only)
@@ -1598,6 +1676,8 @@ module.exports = {
   adminUpdateParticipant,
   adminDeactivateParticipant,
   adminExportParticipantsCSV,
+  adminApproveParticipant,
+  adminApproveDetailedIntake,
   adminListInKindDonations,
   adminUpdateInKindDonationStatus,
   adminExportInKindDonationsCSV,

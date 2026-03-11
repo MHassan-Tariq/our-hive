@@ -132,8 +132,8 @@ const ParticipantProfileSchema = new mongoose.Schema({
   },
   accountStatus: {
     type: String,
-    enum: ['ACTIVE', 'STABLE', 'IN PROGRESS', 'URGENT', 'INACTIVE'],
-    default: 'IN PROGRESS'
+    enum: ['ACTIVE', 'STABLE', 'IN PROGRESS', 'PENDING', 'URGENT', 'INACTIVE'],
+    default: 'INACTIVE'
   },
   isEmailVerified: {
     type: Boolean,
