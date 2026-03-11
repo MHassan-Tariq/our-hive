@@ -6,67 +6,137 @@ const Campaign = require('../models/Campaign');
 const crypto = require('crypto');
 
 /**
- * @desc    Save/Update Participant Profile
+ * @desc    Save/Update Participant Profile (Comprehensive)
  * @route   POST /api/participant/profile
  * @access  Private (Participant)
  */
 exports.saveProfile = async (req, res) => {
   try {
     const { 
+      // Personal Information
       firstName,
       lastName,
       phone,
+      email,
+      dateOfBirth,
+      gender,
+      race,
+      ethnicity,
+      // Address Information (flat format)
+      street,
+      unit,
+      city,
+      state,
+      zipCode,
+      // Address Information (nested format fallback)
+      address,
+      unhousedDetails,
+      // Household Information
+      householdSize,
+      childrenCount,
+      seniorsCount,
+      petsCount,
+      isVeteran,
+      hasDisability,
+      // Income and Housing
+      housingStatus,
+      monthlyIncome,
+      // Other
+      interests, 
+      dietaryRestrictions,
+      citizenStatus,
+      assistancePrograms,
+      consentToInformationUse,
+      isIntakeApproved
+    } = req.body;
+
+    // Update User model with personal info
+    const userUpdates = {};
+    if (firstName) userUpdates.firstName = firstName;
+    if (lastName) userUpdates.lastName = lastName;
+    if (phone) userUpdates.phone = phone;
+    if (email) userUpdates.email = email;
+    if (gender) userUpdates.gender = gender;
+    
+    if (Object.keys(userUpdates).length > 0) {
+      await User.findByIdAndUpdate(req.user._id, userUpdates, { new: true, runValidators: true });
+    }
+
+    // Build address object from flat fields or use nested address
+    const addressObj = address || {};
+    if (street) addressObj.street = street;
+    if (unit) addressObj.unit = unit;
+    if (city) addressObj.city = city;
+    if (state) addressObj.state = state;
+    if (zipCode) addressObj.zipCode = zipCode;
+
+    // Parse assistancePrograms if it's a string
+    let assistanceProgramsArray = assistancePrograms;
+    if (typeof assistancePrograms === 'string') {
+      try {
+        assistanceProgramsArray = JSON.parse(assistancePrograms);
+      } catch (e) {
+        assistanceProgramsArray = assistancePrograms.split(',').map(p => p.trim());
+      }
+    }
+
+    // Parse dietaryRestrictions if it's a string
+    let dietaryRestrictionsArray = dietaryRestrictions;
+    if (typeof dietaryRestrictions === 'string') {
+      try {
+        dietaryRestrictionsArray = JSON.parse(dietaryRestrictions);
+      } catch (e) {
+        dietaryRestrictionsArray = dietaryRestrictions.split(',').map(d => d.trim());
+      }
+    }
+
+    // Prepare ParticipantProfile updates
+    const profileUpdates = {
       interests, 
       housingStatus, 
-      address, 
+      address: addressObj, 
       unhousedDetails,
       householdSize,
       childrenCount,
       seniorsCount,
       petsCount,
-      dietaryRestrictions,
-      isVeteran,
-      hasDisability,
+      dietaryRestrictions: dietaryRestrictionsArray,
+      isVeteran: isVeteran === 'true' || isVeteran === true,
+      hasDisability: hasDisability === 'true' || hasDisability === true,
       monthlyIncome,
       citizenStatus,
-      assistancePrograms,
-      consentToInformationUse
-    } = req.body;
+      assistancePrograms: assistanceProgramsArray,
+      consentToInformationUse: consentToInformationUse === 'true' || consentToInformationUse === true,
+      isIntakeApproved: isIntakeApproved === 'true' || isIntakeApproved === true,
+      dateOfBirth,
+      race,
+      ethnicity
+    };
 
-    // Update User model if personal info is provided
-    if (firstName || lastName || phone) {
-      const userUpdates = {};
-      if (firstName) userUpdates.firstName = firstName;
-      if (lastName) userUpdates.lastName = lastName;
-      if (phone) userUpdates.phone = phone;
-      
-      await User.findByIdAndUpdate(req.user._id, userUpdates, { new: true, runValidators: true });
+    // Handle document uploads if files are provided
+    if (req.files && req.files.length > 0) {
+      const documents = [];
+      req.files.forEach((file, index) => {
+        const documentType = req.body[`documentType_${index}`] || 'ID';
+        documents.push({
+          documentType,
+          fileUrl: file.path || file.secure_url || file.url,
+          status: 'pending',
+          uploadedAt: new Date()
+        });
+      });
+      profileUpdates.documents = documents;
     }
 
     const profile = await ParticipantProfile.findOneAndUpdate(
       { userId: req.user._id },
-      { 
-        interests, 
-        housingStatus, 
-        address, 
-        unhousedDetails,
-        householdSize,
-        childrenCount,
-        seniorsCount,
-        petsCount,
-        dietaryRestrictions,
-        isVeteran,
-        hasDisability,
-        monthlyIncome,
-        citizenStatus,
-        assistancePrograms,
-        consentToInformationUse
-      },
+      profileUpdates,
       { new: true, upsert: true, runValidators: true }
     );
 
     res.status(200).json({
       success: true,
+      message: 'Profile updated successfully',
       data: profile
     });
   } catch (err) {
@@ -82,7 +152,7 @@ exports.saveProfile = async (req, res) => {
 exports.getParticipantProfile = async (req, res) => {
   try {
     const profile = await ParticipantProfile.findOne({ userId: req.user._id })
-      .populate('userId', 'firstName lastName email phone profilePictureUrl');
+      .populate('userId', 'firstName lastName email phone profilePictureUrl gender');
 
     if (!profile) {
       return res.status(404).json({ success: false, message: 'Profile not found.' });
@@ -97,28 +167,41 @@ exports.getParticipantProfile = async (req, res) => {
           lastName: profile.userId.lastName,
           email: profile.userId.email,
           phone: profile.userId.phone || '',
+          dateOfBirth: profile.dateOfBirth || '',
+          gender: profile.userId.gender || 'Prefer not to say',
+          race: profile.race || '',
+          ethnicity: profile.ethnicity || '',
           profilePictureUrl: profile.userId.profilePictureUrl || ''
         },
         participantId: profile.participantId,
+        addressInfo: {
+          street: profile.address?.street || '',
+          unit: profile.address?.unit || '',
+          city: profile.address?.city || '',
+          state: profile.address?.state || '',
+          zipCode: profile.address?.zipCode || ''
+        },
         householdDetails: {
           householdSize: profile.householdSize,
           childrenCount: profile.childrenCount,
           seniorsCount: profile.seniorsCount,
-          petsCount: profile.petsCount
+          petsCount: profile.petsCount,
+          veteranStatus: profile.isVeteran,
+          disability: profile.hasDisability
         },
-        address: profile.address,
+        incomeAndHousing: {
+          annualIncome: profile.monthlyIncome,
+          housingStatus: profile.housingStatus
+        },
         unhousedDetails: profile.unhousedDetails,
-        housingStatus: profile.housingStatus,
         documents: profile.documents,
+        assistancePrograms: profile.assistancePrograms,
         intakeStatus: profile.intakeStatus,
         interests: profile.interests,
         dietaryRestrictions: profile.dietaryRestrictions,
-        isVeteran: profile.isVeteran,
-        hasDisability: profile.hasDisability,
-        monthlyIncome: profile.monthlyIncome,
         citizenStatus: profile.citizenStatus,
-        assistancePrograms: profile.assistancePrograms,
         consentToInformationUse: profile.consentToInformationUse,
+        isIntakeApproved: profile.isIntakeApproved,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt
       }
@@ -566,6 +649,137 @@ exports.getPantries = async (req, res) => {
       success: true,
       count: formattedPantries.length,
       data: formattedPantries
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+/**
+ * @desc    Complete Intake Form Submission (All fields in one payload)
+ * @route   POST /api/participant/complete-intake
+ * @access  Private (Participant)
+ */
+exports.completeIntakeSubmission = async (req, res) => {
+  try {
+    const {
+      // Personal Info - Step 1
+      firstName,
+      lastName,
+      phone,
+      
+      // Current Residence - Step 2
+      housingStatus,
+      address,
+      unhousedDetails,
+      
+      // Household Info - Step 3
+      householdSize,
+      childrenCount,
+      seniorsCount,
+      petsCount,
+      dietaryRestrictions,
+      isVeteran,
+      hasDisability,
+      
+      // Income & Housing - Step 4
+      monthlyIncome,
+      citizenStatus,
+      
+      // Assistance Programs - Step 5
+      assistancePrograms,
+      
+      // Consent - Step 6
+      consentToInformationUse
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !phone || !housingStatus) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: firstName, lastName, phone, housingStatus'
+      });
+    }
+
+    // Update User model with personal info
+    const userUpdates = {};
+    if (firstName) userUpdates.firstName = firstName;
+    if (lastName) userUpdates.lastName = lastName;
+    if (phone) userUpdates.phone = phone;
+    
+    await User.findByIdAndUpdate(req.user._id, userUpdates, { new: true, runValidators: true });
+
+    // Prepare profile update
+    const profileUpdate = {
+      // Personal Info
+      firstName,
+      lastName,
+      phone,
+      
+      // Residence
+      housingStatus,
+      address: address || {},
+      unhousedDetails: unhousedDetails || {},
+      
+      // Household
+      householdSize: householdSize || 1,
+      childrenCount: childrenCount || 0,
+      seniorsCount: seniorsCount || 0,
+      petsCount: petsCount || 0,
+      dietaryRestrictions: dietaryRestrictions || [],
+      isVeteran: isVeteran || false,
+      hasDisability: hasDisability || false,
+      
+      // Income
+      monthlyIncome: monthlyIncome || 0,
+      citizenStatus: citizenStatus || 'Prefer not to say',
+      
+      // Assistance
+      assistancePrograms: assistancePrograms || [],
+      
+      // Consent
+      consentToInformationUse: consentToInformationUse || false,
+      
+      // Mark intake as complete
+      'intakeStatus.currentStep': 6,
+      'intakeStatus.percentage': 100,
+      'intakeStatus.status': 'Pending Review'
+    };
+
+    const profile = await ParticipantProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      { $set: profileUpdate },
+      { new: true, upsert: true, runValidators: true }
+    ).populate('userId', 'firstName lastName email phone');
+
+    res.status(200).json({
+      success: true,
+      message: 'Intake form submitted successfully',
+      data: {
+        personalInfo: {
+          firstName: profile.userId.firstName,
+          lastName: profile.userId.lastName,
+          email: profile.userId.email,
+          phone: profile.userId.phone
+        },
+        participantId: profile.participantId,
+        householdDetails: {
+          householdSize: profile.householdSize,
+          childrenCount: profile.childrenCount,
+          seniorsCount: profile.seniorsCount,
+          petsCount: profile.petsCount
+        },
+        address: profile.address,
+        unhousedDetails: profile.unhousedDetails,
+        housingStatus: profile.housingStatus,
+        dietaryRestrictions: profile.dietaryRestrictions,
+        isVeteran: profile.isVeteran,
+        hasDisability: profile.hasDisability,
+        monthlyIncome: profile.monthlyIncome,
+        citizenStatus: profile.citizenStatus,
+        assistancePrograms: profile.assistancePrograms,
+        consentToInformationUse: profile.consentToInformationUse,
+        intakeStatus: profile.intakeStatus
+      }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, logout, checkAvailability, forgotPassword, resetPassword, volunteerRegister, partnerRegister } = require('../controllers/authController');
+const { register, login, logout, checkAvailability, forgotPassword, resetPassword, volunteerRegister, participantRegister, partnerRegister } = require('../controllers/authController');
 
 /**
  * @swagger
@@ -122,6 +122,31 @@ router.post(
   ]),
   volunteerRegister
 );
+
+/**
+ * @swagger
+ * /api/auth/participant-register:
+ *   post:
+ *     summary: Participant Registration
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password, phone]
+ *             properties:
+ *               fullName: { type: string, example: "Jane Doe" }
+ *               email: { type: string, format: email, example: "jane@ourhive.com" }
+ *               password: { type: string, minLength: 6, example: "password123" }
+ *               phone: { type: string, example: "(555) 123-4567" }
+ *               mailingAddress: { type: string, example: "123 Main St, City, State, ZIP" }
+ *     responses:
+ *       201:
+ *         description: Participant registered and pending approval.
+ */
+router.post('/participant-register', participantRegister);
 
 /**
  * @swagger

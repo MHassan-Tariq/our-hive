@@ -93,6 +93,20 @@ const ParticipantProfileSchema = new mongoose.Schema({
     enum: ['Male', 'Female', 'Non-Binary', 'Prefer not to say'],
     default: 'Prefer not to say'
   },
+  dateOfBirth: {
+    type: Date,
+    default: null
+  },
+  race: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  ethnicity: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   raceEthnicity: {
     type: String,
     trim: true
@@ -117,6 +131,10 @@ const ParticipantProfileSchema = new mongoose.Schema({
     default: []
   },
   consentToInformationUse: {
+    type: Boolean,
+    default: false
+  },
+  isIntakeApproved: {
     type: Boolean,
     default: false
   },

@@ -1,4 +1,5 @@
 const Sponsor = require('../models/Sponsor');
+const User = require('../models/User');
 const MonetaryDonation = require('../models/MonetaryDonation');
 const InKindDonation = require('../models/InKindDonation');
 const ActivityLog = require('../models/ActivityLog');
@@ -171,8 +172,12 @@ const getSponsorDashboard = asyncHandler(async (req, res, next) => {
       user: {
         firstName: req.user.firstName,
         lastName: req.user.lastName,
-        profilePictureUrl: req.user.profilePictureUrl,
+        email: req.user.email,
+        phone: req.user.phone,
+        profileurl: req.user.profilePictureUrl || "",
+        MemberSince: req.user.createdAt,
       },
+      
       stats: {
         totalSupport: profile ? profile.totalContributed : 0,
         activeContributions: inKindCount + monetaryDonations.length,
@@ -255,6 +260,66 @@ const getCampaigns = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Update sponsor personal information
+ * @route   PATCH /api/sponsor/account
+ * @access  Private (sponsor)
+ */
+const updatePersonalInfo = asyncHandler(async (req, res, next) => {
+  const { firstName, lastName, phone, email } = req.body;
+  const updateData = {};
+
+  if (firstName !== undefined) updateData.firstName = firstName;
+  if (lastName !== undefined) updateData.lastName = lastName;
+  if (phone !== undefined) updateData.phone = phone;
+  if (email !== undefined) updateData.email = email;
+
+  if (req.file) {
+    updateData.profilePictureUrl = req.file.path;
+  }
+
+  // Check if email is already taken by another user
+  if (email) {
+    const existingEmail = await User.findOne({ email, _id: { $ne: req.user._id } });
+    if (existingEmail) {
+      return next(new ErrorResponse('Email is already in use', 400));
+    }
+  }
+
+  // Check if phone is already taken by another user
+  if (phone) {
+    const existingPhone = await User.findOne({ phone, _id: { $ne: req.user._id } });
+    if (existingPhone) {
+      return next(new ErrorResponse('Phone number is already in use', 400));
+    }
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { $set: updateData },
+    { new: true, runValidators: true }
+  ).select('-password');
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  // Activity Log
+  await ActivityLog.create({
+    userId: req.user._id,
+    type: 'Profile Updated',
+    content: 'You updated your personal information.',
+    relatedId: user._id,
+    relatedModel: 'Sponsor',
+  });
+
+  res.status(200).json({
+    success: true,
+    message:'Update Profile Information successfully',
+    data: user,
+  });
+});
+
+/**
  * @desc    Update sponsor organization profile
  * @route   PATCH /api/sponsor/profile
  * @access  Private (sponsor)
@@ -301,5 +366,6 @@ module.exports = {
   getSponsorDashboard,
   getImpact,
   getCampaigns,
+  updatePersonalInfo,
   updateSponsorProfile,
 };

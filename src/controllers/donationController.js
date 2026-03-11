@@ -1,4 +1,6 @@
 const InKindDonation = require('../models/InKindDonation');
+const MonetaryDonation = require('../models/MonetaryDonation');
+const Sponsor = require('../models/Sponsor');
 const User = require('../models/User');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const DonorProfile = require('../models/DonorProfile');
@@ -464,6 +466,164 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   });
 });
 
+/**
+ * @desc    Zeffy Webhook Handler (via Zapier)
+ * @route   POST /api/webhooks/zeffy
+ * @access  Public (Webhook)
+ */
+const zeffyWebhook = asyncHandler(async (req, res) => {
+  console.log('🔔 Zeffy Webhook Received');
+  console.log('Raw Body:', JSON.stringify(req.body, null, 2));
+  console.log('Headers:', req.headers);
+
+  try {
+    // Handle both array and object formats from Zapier
+    let payload = req.body;
+    
+    // If array with single object, extract the object
+    if (Array.isArray(payload) && payload.length > 0) {
+      payload = payload[0];
+    }
+
+    // If payload is wrapped in an object with data property, extract it
+    if (payload && payload.data && !payload.donor_email) {
+      payload = Array.isArray(payload.data) ? payload.data[0] : payload.data;
+    }
+
+    console.log('Extracted Payload:', JSON.stringify(payload, null, 2));
+
+    const {
+      donation_id,
+      donor_email,
+      donor_name,
+      amount,
+      currency,
+      transaction_date,
+      campaign_id,
+      campaign_name,
+      payment_status,
+      is_anonymous,
+      organization_name,
+      recurring
+    } = payload;
+
+    // Validate required fields
+    if (!donor_email || !amount || !payment_status) {
+      console.error('❌ Missing required fields');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: donor_email, amount, payment_status',
+        received: { donor_email, amount, payment_status }
+      });
+    }
+
+    // Only process successful payments
+    if (payment_status !== 'completed' && payment_status !== 'succeeded') {
+      console.log(`⏭️  Skipping payment with status: ${payment_status}`);
+      return res.status(200).json({
+        success: true,
+        message: `Payment status: ${payment_status}. No action needed.`
+      });
+    }
+
+    // Find or create donor user
+    let donor = await User.findOne({ email: donor_email });
+    if (!donor) {
+      // Extract name parts
+      const nameParts = (donor_name || 'Anonymous Donor').trim().split(' ');
+      const firstName = nameParts[0] || 'Anonymous';
+      const lastName = nameParts.slice(1).join(' ') || 'Donor';
+
+      donor = await User.create({
+        firstName,
+        lastName,
+        email: donor_email,
+        password: Math.random().toString(36).slice(-10),
+        role: 'sponsor',
+        isApproved: true
+      });
+
+      // Create sponsor profile
+      await Sponsor.create({
+        userId: donor._id,
+        organizationName: organization_name || firstName,
+        isAnonymous: is_anonymous || false
+      });
+
+      console.log(`✅ New donor created: ${donor._id}`);
+    }
+
+    // Find sponsor profile
+    let sponsorProfile = await Sponsor.findOne({ userId: donor._id });
+    if (!sponsorProfile) {
+      sponsorProfile = await Sponsor.create({
+        userId: donor._id,
+        organizationName: organization_name || donor.firstName
+      });
+    }
+
+    // Calculate meals provided ($2.50 = 1 meal)
+    const mealsProvided = Math.floor(amount / 2.5);
+
+    // Create monetary donation record
+    const donation = await MonetaryDonation.create({
+      sponsorId: donor._id,
+      amount,
+      currency: currency || 'USD',
+      mealsProvided,
+      paymentMethod: 'Zeffy',
+      projectTitle: campaign_name || 'General Donation',
+      isAnonymous: is_anonymous || false,
+      isMonthly: recurring || false,
+      organizationName: organization_name || donor.firstName,
+      transactionId: donation_id,
+      date: transaction_date ? new Date(transaction_date) : new Date(),
+      status: 'completed'
+    });
+
+    console.log(`✅ Donation recorded: ${donation._id}`);
+
+    // Update sponsor profile - increase total contributed and calculate tier
+    const newTotal = sponsorProfile.totalContributed + amount;
+    const tierUpgrade = Sponsor.getTier(newTotal) !== sponsorProfile.tier;
+
+    await Sponsor.findByIdAndUpdate(
+      sponsorProfile._id,
+      {
+        $inc: { totalContributed: amount },
+        tier: Sponsor.getTier(newTotal),
+        isMonthlySupporter: recurring || sponsorProfile.isMonthlySupporter,
+        organizationName: organization_name || sponsorProfile.organizationName,
+        isAnonymous: is_anonymous !== undefined ? is_anonymous : sponsorProfile.isAnonymous
+      },
+      { new: true }
+    );
+
+    console.log(`✅ Sponsor profile updated. New tier: ${Sponsor.getTier(newTotal)}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment received and processed successfully',
+      data: {
+        donorId: donor._id,
+        donorEmail: donor.email,
+        donationId: donation._id,
+        amount,
+        mealsProvided,
+        tierUpgraded,
+        newTier: Sponsor.getTier(newTotal)
+      }
+    });
+  } catch (err) {
+    console.error('❌ Zeffy Webhook Error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+      error: process.env.NODE_ENV === 'development' ? err : undefined
+    });
+  }
+});
+
 module.exports = {
   offerItem,
   getMyDonations,
@@ -475,5 +635,6 @@ module.exports = {
   updateDonation,
   getAllDonations,
   getInKindDonationById,
-  ChangeDonationStatus
+  ChangeDonationStatus,
+  zeffyWebhook
 };
