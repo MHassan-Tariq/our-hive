@@ -147,7 +147,7 @@ const ParticipantProfileSchema = new mongoose.Schema({
   isEmailVerified: {
     type: Boolean,
     default: false
-  },g
+  },
   emailVerificationCode: {
     type: String,
     select: false
