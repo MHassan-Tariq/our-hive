@@ -415,7 +415,7 @@ const adminUpdateParticipant = asyncHandler(async (req, res, next) => {
     'housingStatus', 'address', 'unhousedDetails', 'householdSize',
     'childrenCount', 'seniorsCount', 'petsCount', 'dietaryRestrictions',
     'isVeteran', 'hasDisability', 'gender', 'raceEthnicity', 'primaryLanguage',
-    'monthlyIncome', 'citizenStatus', 'assistancePrograms', 'accountStatus', 'interests'
+    'annualIncome', 'citizenStatus', 'assistancePrograms', 'accountStatus', 'interests'
   ];
   const updates = {};
   allowed.forEach(key => { if (req.body[key] !== undefined) updates[key] = req.body[key]; });
@@ -449,9 +449,9 @@ const adminExportParticipantsCSV = asyncHandler(async (req, res, next) => {
   const profiles = await ParticipantProfile.find()
     .populate('userId', 'firstName lastName email phone createdAt');
 
-  const rows = [
+    const rows = [
     ['Participant ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Housing Status',
-     'City', 'Account Status', 'Intake %', 'Gender', 'Monthly Income', 'Registered At'].join(',')
+     'City', 'Account Status', 'Intake %', 'Gender', 'Annual Income', 'Registered At'].join(',')
   ];
 
   profiles.forEach(p => {
@@ -464,7 +464,7 @@ const adminExportParticipantsCSV = asyncHandler(async (req, res, next) => {
       p.accountStatus || '',
       p.intakeStatus?.percentage || 0,
       p.gender || '',
-      p.monthlyIncome || 0,
+      p.annualIncome || '0',
       u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : ''
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
   });

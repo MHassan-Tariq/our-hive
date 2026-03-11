@@ -26,12 +26,11 @@ const sendTokenResponse = async (user, statusCode, res) => {
       createdAt: user.createdAt,
     },
   };
-
-  // For participant role, fetch and add intake approval status
   if (user.role === 'participant') {
     const participantProfile = await ParticipantProfile.findOne({ userId: user._id });
     if (participantProfile) {
       responseData.user.isIntakeApproved = participantProfile.isIntakeApproved;
+      responseData.user.intakeStatus = participantProfile.intakeStatus;
     }
   }
 
@@ -460,7 +459,6 @@ const login = asyncHandler(async (req, res, next) => {
       Status: 200,
       Isapproved: false,
       role: user.role,
-
       success: false,
       message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
     });

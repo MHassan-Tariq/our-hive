@@ -119,7 +119,13 @@ UserSchema.methods.getResetPasswordToken = function () {
 
 // Method to generate signed JWT token
 UserSchema.methods.getSignedJwtToken = function () {
-  return jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, {
+  return jwt.sign({ 
+    id: this._id, 
+    role: this.role,
+    firstName: this.firstName,
+    lastName: this.lastName,
+    email: this.email
+  }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '30d',
   });
 };

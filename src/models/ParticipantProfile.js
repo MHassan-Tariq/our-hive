@@ -10,12 +10,10 @@ const VoucherSchema = new mongoose.Schema({
   serviceType: {
     type: String,
     required: true,
-    enum: ['Opportunity', 'InKindDonation']
-  },
+   },
   status: {
     type: String,
-    enum: ['active', 'redeemed', 'expired'],
-    default: 'active'
+     default: 'active'
   },
   qrCodeData: {
     type: String,
@@ -42,8 +40,7 @@ const ParticipantProfileSchema = new mongoose.Schema({
   },
   housingStatus: {
     type: String,
-    enum: ['Housed', 'Unhoused', 'Shelter', 'Transitional Housing', 'At Risk of Homelessness'],
-    default: 'Housed'
+     default: 'Housed'
   },
   address: {
     street: { type: String, trim: true },
@@ -77,8 +74,7 @@ const ParticipantProfileSchema = new mongoose.Schema({
   },
   dietaryRestrictions: {
     type: [String],
-    enum: ['Gluten-Free', 'Vegetarian', 'Vegan', 'Halal', 'Other'],
-    default: []
+     default: []
   },
   isVeteran: {
     type: Boolean,
@@ -90,8 +86,7 @@ const ParticipantProfileSchema = new mongoose.Schema({
   },
   gender: {
     type: String,
-    enum: ['Male', 'Female', 'Non-Binary', 'Prefer not to say'],
-    default: 'Prefer not to say'
+     default: 'Prefer not to say'
   },
   dateOfBirth: {
     type: Date,
@@ -116,18 +111,16 @@ const ParticipantProfileSchema = new mongoose.Schema({
     default: 'English',
     trim: true
   },
-  monthlyIncome: {
-    type: Number,
-    default: 0
+  annualIncome: {
+    type: String,
+    default: '0'
   },
   citizenStatus: {
     type: String,
-    enum: ['Yes', 'No', 'Prefer not to say'],
-    default: 'Prefer not to say'
+     default: 'Prefer not to say'
   },
   assistancePrograms: {
     type: [String],
-    enum: ['CalFresh', 'Medi-Cal', 'SSI', 'Other'],
     default: []
   },
   consentToInformationUse: {
@@ -144,14 +137,12 @@ const ParticipantProfileSchema = new mongoose.Schema({
     percentage: { type: Number, default: 0 },
     status: { 
       type: String, 
-      enum: ['Action Required', 'Pending Review', 'Completed', 'Rejected'],
-      default: 'Action Required'
+       default: 'Action Required'
     }
   },
   accountStatus: {
     type: String,
-    enum: ['ACTIVE', 'STABLE', 'IN PROGRESS', 'URGENT', 'INACTIVE'],
-    default: 'IN PROGRESS'
+     default: 'IN PROGRESS'
   },
   isEmailVerified: {
     type: Boolean,

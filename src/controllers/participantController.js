@@ -40,7 +40,7 @@ exports.saveProfile = async (req, res) => {
       hasDisability,
       // Income and Housing
       housingStatus,
-      monthlyIncome,
+      annualIncome,
       // Other
       interests, 
       dietaryRestrictions,
@@ -103,7 +103,7 @@ exports.saveProfile = async (req, res) => {
       dietaryRestrictions: dietaryRestrictionsArray,
       isVeteran: isVeteran === 'true' || isVeteran === true,
       hasDisability: hasDisability === 'true' || hasDisability === true,
-      monthlyIncome,
+      annualIncome,
       citizenStatus,
       assistancePrograms: assistanceProgramsArray,
       consentToInformationUse: consentToInformationUse === 'true' || consentToInformationUse === true,
@@ -112,6 +112,9 @@ exports.saveProfile = async (req, res) => {
       race,
       ethnicity
     };
+
+    // Set intake status to Pending Review whenever profile is updated
+    profileUpdates['intakeStatus.status'] = 'Pending';
 
     // Handle document uploads if files are provided
     if (req.files && req.files.length > 0) {
@@ -134,9 +137,25 @@ exports.saveProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
+    // Fetch updated user to generate new token
+    const user = await User.findById(req.user._id);
+    const token = user.getSignedJwtToken();
+
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
+      token,
+      user: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        isApproved: user.isApproved,
+        isIntakeApproved: profile.isIntakeApproved,
+        inTakeStatus: profile.intakeStatus,
+        createdAt: user.createdAt,
+      },
       data: profile
     });
   } catch (err) {
@@ -190,7 +209,7 @@ exports.getParticipantProfile = async (req, res) => {
           disability: profile.hasDisability
         },
         incomeAndHousing: {
-          annualIncome: profile.monthlyIncome,
+          annualIncome: profile.annualIncome,
           housingStatus: profile.housingStatus
         },
         unhousedDetails: profile.unhousedDetails,
@@ -395,7 +414,7 @@ exports.submitIntakeStep = async (req, res) => {
       if (data.dietaryRestrictions) update.dietaryRestrictions = data.dietaryRestrictions;
       if (data.isVeteran !== undefined) update.isVeteran = data.isVeteran;
       if (data.hasDisability !== undefined) update.hasDisability = data.hasDisability;
-      if (data.monthlyIncome !== undefined) update.monthlyIncome = data.monthlyIncome;
+      if (data.annualIncome !== undefined) update.annualIncome = data.annualIncome;
       if (data.citizenStatus) update.citizenStatus = data.citizenStatus;
       if (data.assistancePrograms) update.assistancePrograms = data.assistancePrograms;
       if (data.consentToInformationUse !== undefined) update.consentToInformationUse = data.consentToInformationUse;
@@ -682,7 +701,7 @@ exports.completeIntakeSubmission = async (req, res) => {
       hasDisability,
       
       // Income & Housing - Step 4
-      monthlyIncome,
+      annualIncome,
       citizenStatus,
       
       // Assistance Programs - Step 5
@@ -730,7 +749,7 @@ exports.completeIntakeSubmission = async (req, res) => {
       hasDisability: hasDisability || false,
       
       // Income
-      monthlyIncome: monthlyIncome || 0,
+      annualIncome: annualIncome || '0',
       citizenStatus: citizenStatus || 'Prefer not to say',
       
       // Assistance
@@ -774,7 +793,7 @@ exports.completeIntakeSubmission = async (req, res) => {
         dietaryRestrictions: profile.dietaryRestrictions,
         isVeteran: profile.isVeteran,
         hasDisability: profile.hasDisability,
-        monthlyIncome: profile.monthlyIncome,
+        annualIncome: profile.annualIncome,
         citizenStatus: profile.citizenStatus,
         assistancePrograms: profile.assistancePrograms,
         consentToInformationUse: profile.consentToInformationUse,

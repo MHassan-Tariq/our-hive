@@ -55,7 +55,7 @@ router.use(authorize('participant'));
  *               petsCount: { type: integer, example: 1 }
  *               isVeteran: { type: boolean, example: false }
  *               hasDisability: { type: boolean, example: false }
- *               monthlyIncome: { type: number, example: 2500 }
+ *               annualIncome: { type: string, example: "50000" }
  *               housingStatus: { type: string, enum: ['Housed', 'Unhoused', 'Shelter', 'Transitional Housing', 'At Risk of Homelessness'] }
  *               assistancePrograms: { type: array, items: { type: string }, example: ["CalFresh", "Medi-Cal"] }
  *               dietaryRestrictions: { type: array, items: { type: string }, example: ["Vegetarian"] }
@@ -271,7 +271,7 @@ router.get('/dashboard', getParticipantDashboard);
  *                   dietaryRestrictions: { type: array, items: { type: string } }
  *                   isVeteran: { type: boolean }
  *                   hasDisability: { type: boolean }
- *                   monthlyIncome: { type: number }
+ *                   annualIncome: { type: string }
  *                   citizenStatus: { type: string }
  *                   assistancePrograms: { type: array, items: { type: string } }
  *                   consentToInformationUse: { type: boolean }
@@ -324,7 +324,7 @@ router.patch('/intake-step', submitIntakeStep);
  *               dietaryRestrictions: { type: array, items: { type: string }, example: ["Gluten-Free", "Vegetarian"] }
  *               isVeteran: { type: boolean, example: false }
  *               hasDisability: { type: boolean, example: false }
- *               monthlyIncome: { type: number, example: 1500 }
+ *               annualIncome: { type: string, example: "45000" }
  *               citizenStatus: { type: string, enum: ["Yes", "No", "Prefer not to say"], example: "Yes" }
  *               assistancePrograms: { type: array, items: { type: string }, example: ["CalFresh", "Medi-Cal"] }
  *               consentToInformationUse: { type: boolean, example: true }

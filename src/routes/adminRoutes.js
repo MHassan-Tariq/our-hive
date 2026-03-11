@@ -648,7 +648,7 @@ router.get('/participants/export', adminExportParticipantsCSV);
  *                     gender: { type: string }
  *                     raceEthnicity: { type: string, example: "Caucasian / Non-Hispanic" }
  *                     primaryLanguage: { type: string, example: "English" }
- *                     monthlyIncome: { type: number, example: 2450 }
+ *                     annualIncome: { type: string, example: "50000" }
  *                     isVeteran: { type: boolean }
  *                     hasDisability: { type: boolean }
  *                     documents: { type: array }
@@ -686,7 +686,7 @@ router.get('/participants/export', adminExportParticipantsCSV);
  *               gender: { type: string, enum: [Male, Female, Non-Binary, "Prefer not to say"] }
  *               raceEthnicity: { type: string }
  *               primaryLanguage: { type: string }
- *               monthlyIncome: { type: number }
+ *               annualIncome: { type: string }
  *               isVeteran: { type: boolean }
  *               hasDisability: { type: boolean }
  *               address: { type: object }
