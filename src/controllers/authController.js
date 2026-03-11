@@ -4,6 +4,7 @@ const Sponsor = require('../models/Sponsor');
 const DonorProfile = require('../models/DonorProfile');
 const ParticipantProfile = require('../models/ParticipantProfile');
 const PartnerProfile = require('../models/PartnerProfile');
+const ActivityLog = require('../models/ActivityLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
@@ -97,6 +98,22 @@ console.log('Received registration data:', req.body);
     case 'participant':
       await ParticipantProfile.create({ userId: user._id });
       break;
+  }
+
+  // Create Activity Log
+  if (['volunteer', 'partner', 'participant'].includes(user.role)) {
+    let type = 'New Registration';
+    if (user.role === 'volunteer') type = 'New Volunteer Interest';
+    if (user.role === 'participant') type = 'New Participant Intake';
+    if (user.role === 'partner') type = 'New Partner Registration';
+
+    await ActivityLog.create({
+      userId: user._id,
+      type,
+      content: `${firstName} ${lastName} has registered as a ${user.role}.`,
+      relatedId: user._id,
+      relatedModel: user.role === 'participant' ? 'ParticipantProfile' : (user.role === 'volunteer' ? 'VolunteerProfile' : 'PartnerProfile')
+    });
   }
 
   await sendTokenResponse(user, 201, res);
@@ -268,6 +285,15 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
   });
   console.log('Volunteer profile created:', { id: profile._id, userId: profile.userId });
 
+  // Create Activity Log
+  await ActivityLog.create({
+    userId: user._id,
+    type: 'New Volunteer Interest',
+    content: `${firstName} ${lastName} has registered as a volunteer.`,
+    relatedId: profile._id,
+    relatedModel: 'VolunteerProfile'
+  });
+
   // Return success response
   const token = user.getSignedJwtToken();
   console.log('Registration successful, sending response.');
@@ -411,6 +437,15 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     website,
     intendedRoles: Array.isArray(intendedRoles) ? intendedRoles : (intendedRoles ? intendedRoles.split(',').map(r => r.trim()) : []),
     status: 'Pending'
+  });
+
+  // Create Activity Log
+  await ActivityLog.create({
+    userId: user._id,
+    type: 'New Partner Registration',
+    content: `${firstName} ${lastName} has registered as a community partner for "${orgName}".`,
+    relatedId: user._id, // or partnerProfile._id, but User ID is fine for activity log
+    relatedModel: 'PartnerProfile'
   });
 
   const token = user.getSignedJwtToken();

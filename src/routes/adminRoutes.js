@@ -15,6 +15,8 @@ const {
   adminUpdateParticipant,
   adminDeactivateParticipant,
   adminExportParticipantsCSV,
+  adminApproveParticipant,
+  adminApproveDetailedIntake,
   adminListInKindDonations,
   adminUpdateInKindDonationStatus,
   adminExportInKindDonationsCSV,
@@ -720,6 +722,8 @@ router.patch('/participants/:id', adminUpdateParticipant);
  *         description: Participant not found
  */
 router.patch('/participants/:id/deactivate', adminDeactivateParticipant);
+router.patch('/participants/:id/approve', adminApproveParticipant);
+router.patch('/participants/:id/approve-detailed', adminApproveDetailedIntake);
 
 /**
  * @swagger
