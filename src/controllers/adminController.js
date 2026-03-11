@@ -1299,7 +1299,8 @@ const adminApproveDetailedIntake = asyncHandler(async (req, res, next) => {
     req.params.id,
     {
       'intakeStatus.status': 'Completed',
-      accountStatus: 'ACTIVE'
+      accountStatus: 'ACTIVE',
+      isIntakeApproved: true
     },
     { new: true, runValidators: true }
   );
