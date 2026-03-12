@@ -171,58 +171,99 @@ exports.saveProfile = async (req, res) => {
 exports.getParticipantProfile = async (req, res) => {
   try {
     const profile = await ParticipantProfile.findOne({ userId: req.user._id })
-      .populate('userId', 'firstName lastName email phone profilePictureUrl gender');
+      .populate('userId', 'firstName lastName email phone gender profileImage');
 
     if (!profile) {
       return res.status(404).json({ success: false, message: 'Profile not found.' });
     }
 
-    // Format the response to map nicely to the UI
+    // Build full address
+    const fullAddress = [
+      profile.address?.street,
+      profile.address?.unit,
+      profile.address?.city,
+      profile.address?.state,
+      profile.address?.zipCode
+    ].filter(Boolean).join(', ');
+
+    // Format documents with full details
+    const documentsData = profile.documents?.map(d => ({
+      documentType: d.documentType,
+      fileUrl: d.fileUrl,
+      status: d.status,
+      uploadedAt: d.uploadedAt
+    })) || [];
+
     res.status(200).json({
       success: true,
       data: {
+        // Basic Information
+        name: `${profile.userId.firstName} ${profile.userId.lastName}`,
+        participantId: profile.participantId,
+        profileImage: profile.userId.profileImage || '',
+        
+        // Personal Information
         personalInfo: {
           firstName: profile.userId.firstName,
           lastName: profile.userId.lastName,
-          email: profile.userId.email,
+          email: profile.userId.email || '',
           phone: profile.userId.phone || '',
-          dateOfBirth: profile.dateOfBirth || '',
           gender: profile.userId.gender || 'Prefer not to say',
+          dateOfBirth: profile.dateOfBirth || null,
           race: profile.race || '',
-          ethnicity: profile.ethnicity || '',
-          profilePictureUrl: profile.userId.profilePictureUrl || ''
+          ethnicity: profile.ethnicity || ''
         },
-        participantId: profile.participantId,
-        addressInfo: {
+        
+        // Address Information
+        address: {
+          fullAddress: fullAddress || '',
           street: profile.address?.street || '',
           unit: profile.address?.unit || '',
           city: profile.address?.city || '',
           state: profile.address?.state || '',
           zipCode: profile.address?.zipCode || ''
         },
+        
+        // Household Details
         householdDetails: {
-          householdSize: profile.householdSize,
-          childrenCount: profile.childrenCount,
-          seniorsCount: profile.seniorsCount,
-          petsCount: profile.petsCount,
-          veteranStatus: profile.isVeteran,
-          disability: profile.hasDisability
+          familySize: profile.householdSize || 0,
+          childrenCount: profile.childrenCount || 0,
+          seniorsCount: profile.seniorsCount || 0,
+          petsCount: profile.petsCount || 0,
+          isVeteran: profile.isVeteran || false,
+          hasDisability: profile.hasDisability || false
         },
-        incomeAndHousing: {
-          annualIncome: profile.annualIncome,
-          housingStatus: profile.housingStatus
+        
+        // Housing & Income
+        housing: {
+          housingStatus: profile.housingStatus || 'Housed',
+          annualIncome: profile.annualIncome || '0'
         },
-        unhousedDetails: profile.unhousedDetails,
-        documents: profile.documents,
-        assistancePrograms: profile.assistancePrograms,
-        intakeStatus: profile.intakeStatus,
-        interests: profile.interests,
-        dietaryRestrictions: profile.dietaryRestrictions,
-        citizenStatus: profile.citizenStatus,
-        consentToInformationUse: profile.consentToInformationUse,
-        isIntakeApproved: profile.isIntakeApproved,
-        createdAt: profile.createdAt,
-        updatedAt: profile.updatedAt
+        
+        // Documents
+        documents: {
+          count: documentsData.length,
+          list: documentsData,
+          status: documentsData.length > 0 ? documentsData[0].status : 'pending'
+        },
+        
+        // Assistance & Dietary
+        assistance: {
+          assistancePrograms: profile.assistancePrograms || [],
+          dietaryRestrictions: profile.dietaryRestrictions || [],
+          citizenStatus: profile.citizenStatus || 'Prefer not to say'
+        },
+        
+        // Intake Status
+        intake: {
+          status: profile.intakeStatus?.status || 'Action Required',
+          currentStep: profile.intakeStatus?.currentStep || 1,
+          totalSteps: profile.intakeStatus?.totalSteps || 6,
+          percentage: profile.intakeStatus?.percentage || 0
+        },
+        
+        // Approval Status
+        isIntakeApproved: profile.isIntakeApproved || false
       }
     });
   } catch (err) {
@@ -798,6 +839,337 @@ exports.completeIntakeSubmission = async (req, res) => {
         assistancePrograms: profile.assistancePrograms,
         consentToInformationUse: profile.consentToInformationUse,
         intakeStatus: profile.intakeStatus
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc    Update Participant Personal Information
+ * @route   PATCH /api/participant/personal-info
+ * @access  Private (Participant/Admin)
+ */
+exports.updatePersonalInfo = async (req, res, next) => {
+  try {
+    let {
+      fullName,
+      firstName,
+      lastName,
+      phone,
+      email,
+      dateOfBirth,
+      gender,
+      race,
+      ethnicity,
+      street,
+      unit,
+      city,
+      state,
+      zipCode
+    } = req.body;
+
+    console.log('Received request body:', req.body);
+
+    // Handle profileImage if file is uploaded
+    let profileImageUrl = null;
+    if (req.file) {
+      profileImageUrl = req.file.path || req.file.secure_url || req.file.url;
+      console.log('Uploaded profile image URL:', profileImageUrl);
+    }
+
+    // Parse fullName if provided (split into firstName and lastName)
+    if (fullName && !firstName && !lastName) {
+      const nameParts = fullName.trim().split(/\s+/);
+      firstName = nameParts[0] || firstName;
+      lastName = nameParts.slice(1).join(' ') || lastName;
+      console.log('Parsed firstName and lastName from fullName:', firstName, lastName);
+    }
+
+    // Get participant profile from token
+    let profile = await ParticipantProfile.findOne({ userId: req.user._id });
+    console.log('Fetched participant profile:', profile);
+
+    if (!profile) {
+      console.log('Participant profile not found for user:', req.user._id);
+      return res.status(404).json({ success: false, message: 'Participant profile not found' });
+    }
+
+    // Update User model with personal info
+    const userUpdates = {};
+    if (firstName) userUpdates.firstName = firstName;
+    if (lastName) userUpdates.lastName = lastName;
+    if (phone) userUpdates.phone = phone;
+    if (email) userUpdates.email = email;
+    if (gender) userUpdates.gender = gender;
+    if (profileImageUrl) userUpdates.profileImage = profileImageUrl;
+
+    console.log('User updates object:', userUpdates);
+
+    let updatedUser = null;
+    if (Object.keys(userUpdates).length > 0) {
+      updatedUser = await User.findByIdAndUpdate(profile.userId, userUpdates, { new: true, runValidators: true });
+      console.log('User model updated successfully:', updatedUser);
+    }
+
+    // Update ParticipantProfile with address and personal info (including gender, dateOfBirth, profileImage)
+    const profileUpdates = {
+      dateOfBirth,
+      gender,
+      race,
+      ethnicity
+    };
+
+    // Update address if any address fields provided
+    if (street || unit || city || state || zipCode) {
+      profileUpdates.address = {
+        street: street || profile.address?.street || '',
+        unit: unit || profile.address?.unit || '',
+        city: city || profile.address?.city || '',
+        state: state || profile.address?.state || '',
+        zipCode: zipCode || profile.address?.zipCode || ''
+      };
+      console.log('Profile address updates:', profileUpdates.address);
+    }
+
+    profile = await ParticipantProfile.findByIdAndUpdate(
+      profile._id,
+      profileUpdates,
+      { new: true, runValidators: true }
+    );
+
+    console.log('Updated participant profile:', profile);
+
+    // Get the updated user (either from the update we just did, or fetch it)
+    const user = updatedUser || await User.findById(profile.userId);
+    console.log('Final user info:', user);
+
+    res.status(200).json({
+      success: true,
+      message: 'Personal information updated successfully',
+      data: {
+        personalInfo: {
+          fullName: `${user.firstName} ${user.lastName}`,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          gender: user.gender,
+          profileImage: user.profileImage,
+          dateOfBirth: profile.dateOfBirth,
+          race: profile.race,
+          ethnicity: profile.ethnicity
+        },
+        address: profile.address
+      }
+    });
+  } catch (err) {
+    console.error('Error updating personal info:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+/**
+ * @desc    Upload/Update Participant Documents
+ * @route   PATCH /api/participant/documents
+ * @access  Private (Participant/Admin)
+ */
+exports.uploadDocuments = async (req, res, next) => {
+  try {
+    console.log('📄 Document upload started');
+    console.log('Files received:', req.files?.length || 0);
+    console.log('Document types:', { documentType_0: req.body.documentType_0, documentType_1: req.body.documentType_1 });
+
+    const { documentType_0, documentType_1 } = req.body;
+
+    // Validate files are provided
+    if (!req.files || req.files.length === 0) {
+      console.log('❌ No files provided');
+      return res.status(400).json({ success: false, message: 'At least one document file is required' });
+    }
+
+    console.log('🔍 Fetching participant profile from token');
+    
+    // Get participant profile from token
+    let profile = await ParticipantProfile.findOne({ userId: req.user._id });
+    if (!profile) {
+      console.log('❌ Participant profile not found for user:', req.user._id);
+      return res.status(404).json({ success: false, message: 'Participant profile not found' });
+    }
+
+    console.log('✅ Profile found, processing documents');
+
+    // Build new documents array
+    const newDocuments = [];
+    const documentTypes = [documentType_0 || 'Document 1', documentType_1 || 'Document 2'];
+
+    // Process each uploaded file
+    for (let i = 0; i < req.files.length && i < 2; i++) {
+      const file = req.files[i];
+      console.log(`Processing file ${i + 1}:`, file.filename || file.originalname);
+
+      if (file && file.path) {
+        newDocuments.push({
+          documentType: documentTypes[i],
+          fileUrl: file.path || file.secure_url || file.url,
+          status: 'pending',
+          uploadedAt: new Date()
+        });
+        console.log(`✅ Document ${i + 1} added:`, documentTypes[i]);
+      }
+    }
+
+    if (newDocuments.length === 0) {
+      console.log('❌ No valid documents processed');
+      return res.status(400).json({ success: false, message: 'Failed to process uploaded files' });
+    }
+
+    console.log('💾 Updating participant profile with documents and intake status');
+
+    // Update profile with documents and intake status
+    profile = await ParticipantProfile.findByIdAndUpdate(
+      profile._id,
+      {
+        documents: newDocuments,
+        'intakeStatus.status': 'Pending Review'
+      },
+      { new: true, runValidators: true }
+    );
+
+    console.log('✅ Documents uploaded and profile updated successfully');
+
+    res.status(200).json({
+      success: true,
+      message: 'Documents uploaded successfully',
+      data: {
+        documents: profile.documents.map(doc => ({
+          documentType: doc.documentType,
+          fileUrl: doc.fileUrl,
+          status: doc.status,
+          uploadedAt: doc.uploadedAt
+        })),
+        intakeStatus: {
+          status: profile.intakeStatus.status,
+          currentStep: profile.intakeStatus.currentStep,
+          percentage: profile.intakeStatus.percentage
+        }
+      }
+    });
+  } catch (err) {
+    console.error('❌ Error uploading documents:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.toString() : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Update Participant Living/Property Information
+ * @route   PATCH /api/participant/living-info
+ * @access  Private (Participant/Admin)
+ */
+exports.updateLivingInfo = async (req, res, next) => {
+  try {
+    const { 
+      housingStatus,
+      householdSize,
+      childrenCount,
+      seniorsCount,
+      petsCount,
+      isVeteran,
+      hasDisability,
+      annualIncome,
+      dietaryRestrictions,
+      assistancePrograms,
+      citizenStatus
+    } = req.body;
+
+    // Get participant profile from token
+    let profile = await ParticipantProfile.findOne({ userId: req.user._id });
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Participant profile not found' });
+    }
+
+    // Parse dietary restrictions if it's a string
+    let dietaryRestrictionsArray = dietaryRestrictions;
+    if (typeof dietaryRestrictions === 'string') {
+      try {
+        dietaryRestrictionsArray = JSON.parse(dietaryRestrictions);
+      } catch (e) {
+        dietaryRestrictionsArray = dietaryRestrictions.split(',').map(d => d.trim());
+      }
+    }
+
+    // Parse assistance programs if it's a string
+    let assistanceProgramsArray = assistancePrograms;
+    if (typeof assistancePrograms === 'string') {
+      try {
+        assistanceProgramsArray = JSON.parse(assistancePrograms);
+      } catch (e) {
+        assistanceProgramsArray = assistancePrograms.split(',').map(p => p.trim());
+      }
+    }
+
+    // Update profile with living/property information
+    const profileUpdates = {
+      housingStatus: housingStatus || profile.housingStatus,
+      householdSize: householdSize !== undefined ? householdSize : profile.householdSize,
+      childrenCount: childrenCount !== undefined ? childrenCount : profile.childrenCount,
+      seniorsCount: seniorsCount !== undefined ? seniorsCount : profile.seniorsCount,
+      petsCount: petsCount !== undefined ? petsCount : profile.petsCount,
+      isVeteran: isVeteran !== undefined ? isVeteran : profile.isVeteran,
+      hasDisability: hasDisability !== undefined ? hasDisability : profile.hasDisability,
+      annualIncome: annualIncome || profile.annualIncome,
+      citizenStatus: citizenStatus || profile.citizenStatus
+    };
+
+    if (dietaryRestrictionsArray) {
+      profileUpdates.dietaryRestrictions = dietaryRestrictionsArray;
+    }
+
+    if (assistanceProgramsArray) {
+      profileUpdates.assistancePrograms = assistanceProgramsArray;
+    }
+
+    // Update intake status to Pending Review
+    profileUpdates['intakeStatus.status'] = 'Pending Review';
+
+    profile = await ParticipantProfile.findByIdAndUpdate(
+      profile._id,
+      profileUpdates,
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Living information updated successfully',
+      data: {
+        housingStatus: profile.housingStatus,
+        household: {
+          householdSize: profile.householdSize,
+          childrenCount: profile.childrenCount,
+          seniorsCount: profile.seniorsCount,
+          petsCount: profile.petsCount
+        },
+        personalStatus: {
+          isVeteran: profile.isVeteran,
+          hasDisability: profile.hasDisability
+        },
+        income: {
+          annualIncome: profile.annualIncome,
+          citizenStatus: profile.citizenStatus
+        },
+        assistance: {
+          dietaryRestrictions: profile.dietaryRestrictions,
+          assistancePrograms: profile.assistancePrograms
+        },
+        intakeStatus: {
+          status: profile.intakeStatus.status,
+          currentStep: profile.intakeStatus.currentStep,
+          percentage: profile.intakeStatus.percentage
+        }
       }
     });
   } catch (err) {
