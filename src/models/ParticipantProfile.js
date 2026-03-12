@@ -137,8 +137,8 @@ const ParticipantProfileSchema = new mongoose.Schema({
     percentage: { type: Number, default: 0 },
     status: { 
       type: String,
-      // Possible values: "Action Required", "Pending Review", "Approved", "Rejected"
-      default: 'Action Required'
+      
+      default: 'InComplete'
     }
   },
   accountStatus: {
