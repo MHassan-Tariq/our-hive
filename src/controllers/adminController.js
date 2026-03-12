@@ -1298,9 +1298,14 @@ const adminApproveDetailedIntake = asyncHandler(async (req, res, next) => {
   const profile = await ParticipantProfile.findByIdAndUpdate(
     req.params.id,
     {
+<<<<<<< Updated upstream
       'intakeStatus.status': 'Completed',
       accountStatus: 'ACTIVE',
       isIntakeApproved: true
+=======
+      'intakeStatus.status': 'Approved',
+      accountStatus: 'ACTIVE'
+>>>>>>> Stashed changes
     },
     { new: true, runValidators: true }
   );

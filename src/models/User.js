@@ -62,9 +62,14 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    profilePictureUrl: {
+    profileImage: {
       type: String,
       trim: true,
+    },
+    gender: {
+      type: String,
+      default: 'Prefer not to say',
+      enum: ['Male', 'Female', 'Non-Binary', 'Prefer not to say']
     },
     mailingAddress: {
       type: String,

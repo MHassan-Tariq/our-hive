@@ -136,8 +136,9 @@ const ParticipantProfileSchema = new mongoose.Schema({
     totalSteps: { type: Number, default: 6 },
     percentage: { type: Number, default: 0 },
     status: { 
-      type: String, 
-       default: 'Action Required'
+      type: String,
+      // Possible values: "Action Required", "Pending Review", "Approved", "Rejected"
+      default: 'Action Required'
     }
   },
   accountStatus: {
