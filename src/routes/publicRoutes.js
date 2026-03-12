@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getStats, getHives, getOpportunities, getOpportunityDetails, getDistributionSchedule, getCampaigns, getAboutUs, getContactInfo, getUserRoles, getMissionStats } = require('../controllers/publicController');
+const { getStats, getHives, getOpportunities, getOpportunityDetails, getDistributionSchedule, getCampaigns, getAboutUs, getContactInfo, getUserRoles, getMissionStats, getSocialLinks } = require('../controllers/publicController');
 const { optionalProtect } = require('../middleware/auth');
 
 /**
@@ -320,5 +320,17 @@ router.get('/user-roles', getUserRoles);
  *         description: Mission stats retrieved.
  */
 router.get('/mission-stats', getMissionStats);
+
+/**
+ * @swagger
+ * /api/public/social-links:
+ *   get:
+ *     summary: Get social media links
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Social links retrieved
+ */
+router.get('/social-links', getSocialLinks);
 
 module.exports = router;

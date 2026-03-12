@@ -631,7 +631,7 @@ const submitMonetaryDonation = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Please provide amount and event ID', 400));
   }
 
-  const campaign = await require('../models/Campaign').findById(eventId);
+  const campaign = await require('../models/Opportunity').findById(eventId);
   if (!campaign) {
     return next(new ErrorResponse('Event not found', 404));
   }
@@ -664,10 +664,29 @@ const getMyMonetaryDonations = asyncHandler(async (req, res, next) => {
     .populate('eventId', 'title')
     .sort({ createdAt: -1 });
 
+  // 1. Calculate Total Donation Amount (All pledges)
+  const totalDonationAmount = donations.reduce((acc, d) => acc + (d.amount || 0), 0);
+
+  // 2. Calculate Total Approved Donation Amount (Completed only)
+  const approvedDonations = donations.filter(d => d.status === 'completed');
+  const totalApprovedDonationAmount = approvedDonations.reduce((acc, d) => acc + (d.amount || 0), 0);
+  const approvedDonationsCount = approvedDonations.length;
+
+  // 3. Transform data to requested format
+  const formattedDonations = donations.map(d => ({
+    name: d.projectTitle,
+    date: d.date,
+    amount: d.amount,
+    status: d.status
+  }));
+
   res.status(200).json({
     success: true,
-    count: donations.length,
-    data: donations
+    totalDonationAmount,
+    totalApprovedDonationAmount,
+    // approvedDonationsCount,
+    count: formattedDonations.length,
+    data: formattedDonations
   });
 });
 

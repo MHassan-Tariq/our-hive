@@ -4,6 +4,7 @@ const VolunteerProfile = require('../models/VolunteerProfile');
 const Sponsor = require('../models/Sponsor');
 const Opportunity = require('../models/Opportunity');
 const Campaign = require('../models/Campaign');
+const SystemSettings = require('../models/SystemSettings');
 
 /**
  * @desc    Get community impact statistics
@@ -502,6 +503,27 @@ exports.getUserRoles = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error retrieving roles' });
+  }
+};
+
+/**
+ * @desc    Get social links from system settings
+ * @route   GET /api/public/social-links
+ * @access  Public
+ */
+exports.getSocialLinks = async (req, res) => {
+  try {
+    let settings = await SystemSettings.findOne();
+    if (!settings) {
+      settings = await SystemSettings.create({});
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: settings.socialLinks
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
