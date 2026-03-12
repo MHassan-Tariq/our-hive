@@ -13,7 +13,9 @@ const {
   getAllDonations,
   getInKindDonationById,
   ChangeDonationStatus,
-  zeffyWebhook
+  zeffyWebhook,
+  submitMonetaryDonation,
+  getMyMonetaryDonations
 } = require('../controllers/donationController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -318,5 +320,41 @@ router.get('/assigned', authorize('partner'), getAssignedDonations);
  *         description: Invalid request data
  */
 router.post('/webhooks/zeffy', zeffyWebhook);
+
+/**
+ * @swagger
+ * /api/donations/monetary:
+ *   post:
+ *     summary: Submit a monetary donation pledge (Zeffy Link)
+ *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount, eventId]
+ *             properties:
+ *               amount: { type: number, example: 50 }
+ *               isMonthly: { type: boolean, example: false }
+ *               eventId: { type: string }
+ *     responses:
+ *       201:
+ *         description: Pledge recorded.
+ */
+router.post('/monetary', authorize('donor', 'sponsor', 'participant', 'volunteer'), submitMonetaryDonation);
+
+/**
+ * @swagger
+ * /api/donations/monetary/my:
+ *   get:
+ *     summary: Get my monetary donation history
+ *     tags: [Donations]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/monetary/my', authorize('donor', 'sponsor', 'participant', 'volunteer'), getMyMonetaryDonations);
 
 module.exports = router;

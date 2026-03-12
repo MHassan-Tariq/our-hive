@@ -362,10 +362,10 @@ const getDonations = asyncHandler(async (req, res, next) => {
     }
 
     monetaryDonations = await MonetaryDonation.find(monQuery)
-      .populate("campaignId", "title description")
+      .populate("eventId", "title description")
       .sort(sortBy === "oldest" ? { date: 1 } : { date: -1 })
       .select(
-        "_id sponsorId campaignId projectTitle amount date status paymentMethod transactionId isMonthly mealsProvided"
+        "_id sponsorId eventId projectTitle amount date status paymentMethod transactionId isMonthly mealsProvided"
       );
   }
 
@@ -442,7 +442,7 @@ const getMonetaryDonations = asyncHandler(async (req, res, next) => {
   if (status) query.status = status;
 
   const donations = await MonetaryDonation.find(query)
-    .populate('campaignId', 'title description')
+    .populate('eventId', 'title description')
     .sort(sortBy === 'oldest' ? { date: 1 } : { date: -1 });
 
   res.status(200).json({
@@ -495,7 +495,7 @@ const getDonationById = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
 
   // Try to find as monetary donation first
-  let donation = await MonetaryDonation.findById(id).populate('campaignId', 'title description');
+  let donation = await MonetaryDonation.findById(id).populate('eventId', 'title description');
 
   if (donation && donation.sponsorId.toString() !== userId.toString()) {
     return next(new ErrorResponse('Not authorized to view this donation', 403));

@@ -20,7 +20,7 @@ const donate = asyncHandler(async (req, res, next) => {
     projectTitle,
     paymentMethod,
     isMonthly,
-    campaignId,
+    eventId,
   } = req.body;
 
   // Convert string amount to number if necessary (common in multipart forms)
@@ -42,7 +42,7 @@ const donate = asyncHandler(async (req, res, next) => {
   const mealsProvided = Math.floor(amount / 2.5);
   const transaction = await MonetaryDonation.create({
     sponsorId: req.user._id,
-    campaignId: campaignId || null,
+    eventId: eventId || null,
     projectTitle: projectTitle || 'General Support',
     amount,
     mealsProvided,
@@ -109,7 +109,7 @@ const donate = asyncHandler(async (req, res, next) => {
  * @access  Private (sponsor)
  */
 const initiateDonation = asyncHandler(async (req, res, next) => {
-  const { amount, campaignId, projectTitle, isMonthly } = req.body;
+  const { amount, eventId, projectTitle, isMonthly } = req.body;
 
   if (!amount || isNaN(amount) || amount <= 0) {
     return next(new ErrorResponse('Please provide a valid positive donation amount.', 400));
@@ -118,7 +118,7 @@ const initiateDonation = asyncHandler(async (req, res, next) => {
   // Create a pending transaction
   const transaction = await MonetaryDonation.create({
     sponsorId: req.user._id,
-    campaignId: campaignId || null,
+    eventId: eventId || null,
     projectTitle: projectTitle || 'General Support',
     amount,
     isMonthly: !!isMonthly,
@@ -127,8 +127,8 @@ const initiateDonation = asyncHandler(async (req, res, next) => {
 
   // Find campaign to get its specific donation URL if available
   let portalUrl = 'https://zeffy.com/donation-portal'; // Default fallback
-  if (campaignId) {
-    const campaign = await Campaign.findById(campaignId);
+  if (eventId) {
+    const campaign = await Campaign.findById(eventId);
     if (campaign && campaign.externalDonationUrl) {
       portalUrl = campaign.externalDonationUrl;
     }
@@ -174,7 +174,7 @@ const getSponsorDashboard = asyncHandler(async (req, res, next) => {
         lastName: req.user.lastName,
         email: req.user.email,
         phone: req.user.phone,
-        profileurl: req.user.profilePictureUrl || "",
+        profileurl: profile?.logoUrl || "",   // <-- fixed: fetch from Sponsor.logoUrl
         MemberSince: req.user.createdAt,
       },
       
@@ -189,7 +189,6 @@ const getSponsorDashboard = asyncHandler(async (req, res, next) => {
     },
   });
 });
-
 /**
  * @desc    Get sponsor impact summary
  * @route   GET /api/sponsor/impact
@@ -265,75 +264,157 @@ const getCampaigns = asyncHandler(async (req, res, next) => {
  * @access  Private (sponsor)
  */
 const updatePersonalInfo = asyncHandler(async (req, res, next) => {
+  console.log("=========== UPDATE PERSONAL INFO API ===========");
+
+  console.log("User ID:", req.user._id);
+  console.log("Request Body:", req.body);
+  console.log("Uploaded File:", req.file);
+
   const { firstName, lastName, phone, email } = req.body;
+
   const updateData = {};
 
-  if (firstName !== undefined) updateData.firstName = firstName;
-  if (lastName !== undefined) updateData.lastName = lastName;
-  if (phone !== undefined) updateData.phone = phone;
-  if (email !== undefined) updateData.email = email;
-
-  if (req.file) {
-    updateData.profilePictureUrl = req.file.path;
+  if (firstName !== undefined) {
+    updateData.firstName = firstName;
+    console.log("Updating firstName:", firstName);
   }
 
-  // Check if email is already taken by another user
+  if (lastName !== undefined) {
+    updateData.lastName = lastName;
+    console.log("Updating lastName:", lastName);
+  }
+
+  if (phone !== undefined) {
+    updateData.phone = phone;
+    console.log("Updating phone:", phone);
+  }
+
+  if (email !== undefined) {
+    updateData.email = email;
+    console.log("Updating email:", email);
+  }
+
+  console.log("Final User Update Data:", updateData);
+
+  // Email duplicate check
   if (email) {
-    const existingEmail = await User.findOne({ email, _id: { $ne: req.user._id } });
+    console.log("Checking email duplication...");
+
+    const existingEmail = await User.findOne({
+      email,
+      _id: { $ne: req.user._id }
+    });
+
     if (existingEmail) {
-      return next(new ErrorResponse('Email is already in use', 400));
+      console.log("Duplicate email found:", email);
+      return next(new ErrorResponse("Email is already in use", 400));
     }
+
+    console.log("Email is unique");
   }
 
-  // Check if phone is already taken by another user
+  // Phone duplicate check
   if (phone) {
-    const existingPhone = await User.findOne({ phone, _id: { $ne: req.user._id } });
+    console.log("Checking phone duplication...");
+
+    const existingPhone = await User.findOne({
+      phone,
+      _id: { $ne: req.user._id }
+    });
+
     if (existingPhone) {
-      return next(new ErrorResponse('Phone number is already in use', 400));
+      console.log("Duplicate phone found:", phone);
+      return next(new ErrorResponse("Phone number is already in use", 400));
     }
+
+    console.log("Phone is unique");
   }
+
+  console.log("Updating USER document...");
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
     { $set: updateData },
-    { new: true, runValidators: true }
-  ).select('-password');
+    { returnDocument: "after", runValidators: true }
+  ).select("-password");
 
   if (!user) {
-    return next(new ErrorResponse('User not found', 404));
+    console.log("User not found in database");
+    return next(new ErrorResponse("User not found", 404));
   }
 
-  // Activity Log
+  console.log("User updated successfully:", user);
+
+  // Sponsor image update
+  let sponsor = null;
+
+  if (req.file) {
+    console.log("Updating sponsor profile image...");
+
+    sponsor = await Sponsor.findOneAndUpdate(
+      { userId: req.user._id },
+      { $set: { logoUrl: req.file.path } },
+      { returnDocument: "after" }
+    );
+
+    console.log("Sponsor image updated:", sponsor?.logoUrl);
+  } else {
+    console.log("No profile image uploaded");
+  }
+
+  console.log("Creating activity log...");
+
   await ActivityLog.create({
     userId: req.user._id,
-    type: 'Profile Updated',
-    content: 'You updated your personal information.',
+    type: "Profile Updated",
+    content: "You updated your personal information.",
     relatedId: user._id,
-    relatedModel: 'Sponsor',
+    relatedModel: "Sponsor",
   });
+
+  console.log("Activity log created successfully");
+
+  console.log("=========== UPDATE COMPLETED ===========");
 
   res.status(200).json({
     success: true,
-    message:'Update Profile Information successfully',
-    data: user,
+    message: "Profile updated successfully",
+    data: {
+      user,
+      sponsor
+    }
   });
 });
-
 /**
  * @desc    Update sponsor organization profile
  * @route   PATCH /api/sponsor/profile
  * @access  Private (sponsor)
  */
 const updateSponsorProfile = asyncHandler(async (req, res, next) => {
+  console.log("Request Body:", req.body);
+  console.log("Uploaded File:", req.file);
+  console.log("User ID:", req.user._id);
+
   const { organizationName, isAnonymous } = req.body;
+
   const updateData = {};
 
-  if (organizationName !== undefined) updateData.organizationName = organizationName;
-  if (isAnonymous !== undefined) updateData.isAnonymous = isAnonymous === 'true' || isAnonymous === true;
+  if (organizationName !== undefined) {
+    updateData.organizationName = organizationName;
+    console.log("Organization Name Updated:", organizationName);
+  }
+
+  if (isAnonymous !== undefined) {
+    updateData.isAnonymous = isAnonymous === 'true' || isAnonymous === true;
+    console.log("Anonymous Status:", updateData.isAnonymous);
+  }
 
   if (req.file) {
     updateData.logoUrl = req.file.path;
+    console.log("Logo Uploaded:", req.file.path);
   }
+
+  console.log("Final Update Data:", updateData);
 
   const sponsor = await Sponsor.findOneAndUpdate(
     { userId: req.user._id },
@@ -341,18 +422,22 @@ const updateSponsorProfile = asyncHandler(async (req, res, next) => {
     { new: true, runValidators: true }
   );
 
+  console.log("Updated Sponsor:", sponsor);
+
   if (!sponsor) {
-    return next(new ErrorResponse('Sponsor profile not found', 404));
+    console.log("Sponsor profile not found");
+    return next(new ErrorResponse("Sponsor profile not found", 404));
   }
 
-  // Activity Log
   await ActivityLog.create({
     userId: req.user._id,
-    type: 'Profile Updated',
-    content: 'You updated your sponsor organization profile.',
+    type: "Profile Updated",
+    content: "You updated your sponsor organization profile.",
     relatedId: sponsor._id,
-    relatedModel: 'Sponsor',
+    relatedModel: "Sponsor",
   });
+
+  console.log("Activity Log Created");
 
   res.status(200).json({
     success: true,

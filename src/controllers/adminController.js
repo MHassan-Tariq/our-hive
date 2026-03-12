@@ -1611,6 +1611,99 @@ const adminDeactivateSponsor = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    List all monetary donations (Admin)
+ * @route   GET /api/admin/donations/monetary
+ * @access  Private (Admin only)
+ */
+const adminListMonetaryDonations = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { status, search } = req.query;
+
+  const query = {};
+  if (status) query.status = status;
+  
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    query.$or = [
+      { projectTitle: regex },
+      { transactionId: regex }
+    ];
+  }
+
+  const total = await MonetaryDonation.countDocuments(query);
+  const donations = await MonetaryDonation.find(query)
+    .populate('sponsorId', 'firstName lastName email')
+    .populate('eventId', 'title')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    count: donations.length,
+    data: donations
+  });
+});
+
+/**
+ * @desc    Approve a monetary donation (Admin)
+ * @route   PATCH /api/admin/donations/monetary/:id/approve
+ * @access  Private (Admin only)
+ */
+const adminApproveMonetaryDonation = asyncHandler(async (req, res, next) => {
+  const { transactionId } = req.body;
+  const donation = await MonetaryDonation.findById(req.params.id);
+
+  if (!donation) {
+    return next(new ErrorResponse('Donation not found', 404));
+  }
+
+  if (donation.status === 'completed') {
+    return next(new ErrorResponse('Donation is already approved/completed', 400));
+  }
+
+  donation.status = 'completed';
+  if (transactionId) {
+    donation.transactionId = transactionId;
+  }
+  
+  // Calculate meals provided ($2.50 = 1 meal)
+  donation.mealsProvided = Math.floor(donation.amount / 2.5);
+  
+  await donation.save();
+
+  // If there's a campaign associated, we should update the raisedAmount
+  if (donation.eventId) {
+    await require('../models/Campaign').findByIdAndUpdate(donation.eventId, {
+      $inc: { raisedAmount: donation.amount }
+    });
+  }
+
+  // Update Sponsor/User total contributed if applicable
+  const sponsor = await Sponsor.findOne({ userId: donation.sponsorId });
+  if (sponsor) {
+    const newTotal = sponsor.totalContributed + donation.amount;
+    sponsor.totalContributed = newTotal;
+    sponsor.tier = Sponsor.getTier(newTotal);
+    if (donation.isMonthly) {
+        sponsor.isMonthlySupporter = true;
+    }
+    await sponsor.save();
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Donation approved successfully',
+    data: donation
+  });
+});
+
+/**
  * @desc    Get all badges
  * @route   GET /api/admin/badges
  * @access  Private (Admin only)
@@ -1746,6 +1839,8 @@ module.exports = {
   adminGetSponsor,
   adminDeactivateSponsor,
   adminDeleteSponsor,
+  adminListMonetaryDonations,
+  adminApproveMonetaryDonation,
   adminGetSettings,
   getSocialLinks,
   adminUpdateSettings,

@@ -52,6 +52,8 @@ const {
   adminCreateBadge,
   adminUpdateBadge,
   adminDeleteBadge,
+  adminListMonetaryDonations,
+  adminApproveMonetaryDonation,
 } = require('../controllers/adminController');
 
 // All routes here are admin only
@@ -1142,6 +1144,32 @@ router.get('/sponsors/:id', adminGetSponsor);
  *         description: Sponsor status updated
  */
 router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
+
+/**
+ * @swagger
+ * /api/admin/donations/monetary:
+ *   get:
+ *     summary: List all monetary donations (Pledges)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, completed] }
+ */
+router.get('/donations/monetary', adminListMonetaryDonations);
+
+/**
+ * @swagger
+ * /api/admin/donations/monetary/{id}/approve:
+ *   patch:
+ *     summary: Approve a monetary donation pledge
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch('/donations/monetary/:id/approve', adminApproveMonetaryDonation);
 
 /**
  * @swagger

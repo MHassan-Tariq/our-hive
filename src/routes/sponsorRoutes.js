@@ -34,7 +34,7 @@ router.use(authorize('sponsor'));
  *               - amount
  *             properties:
  *               amount: { type: number, example: 100 }
- *               campaignId: { type: string, example: "653b8f..." }
+ *               eventId: { type: string, example: "653b8f..." }
  *               projectTitle: { type: string, example: "Clean Water" }
  *               isMonthly: { type: boolean, example: false }
  *     responses:
@@ -140,7 +140,7 @@ router.get('/profile', getSponsorDashboard);
  *               isMonthly:
  *                 type: boolean
  *                 description: Set to true if this is a recurring monthly donation.
- *               campaignId:
+ *               eventId:
  *                 type: string
  *                 description: The ID of the campaign being supported.
  *               logo:

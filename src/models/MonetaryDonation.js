@@ -7,7 +7,7 @@ const MonetaryDonationSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    campaignId: {
+    eventId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campaign',
     },
@@ -41,6 +41,14 @@ const MonetaryDonationSchema = new mongoose.Schema(
     isMonthly: {
       type: Boolean,
       default: false,
+    },
+    isAnonymous: {
+      type: Boolean,
+      default: false,
+    },
+    currency: {
+      type: String,
+      default: 'USD',
     },
     mealsProvided: {
       type: Number,

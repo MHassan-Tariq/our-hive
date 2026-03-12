@@ -624,6 +624,53 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
   }
 });
 
+const submitMonetaryDonation = asyncHandler(async (req, res, next) => {
+  const { amount, isMonthly, eventId } = req.body;
+
+  if (!amount || !eventId) {
+    return next(new ErrorResponse('Please provide amount and event ID', 400));
+  }
+
+  const campaign = await require('../models/Campaign').findById(eventId);
+  if (!campaign) {
+    return next(new ErrorResponse('Event not found', 404));
+  }
+
+  const donation = await MonetaryDonation.create({
+    sponsorId: req.user._id,
+    eventId,
+    projectTitle: campaign.title,
+    amount,
+    isMonthly: isMonthly === true || isMonthly === 'true',
+    status: 'pending',
+    paymentMethod: 'Zeffy'
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Donation pledge recorded. Please complete payment on Zeffy.',
+    donationLink: campaign.externalDonationUrl,
+    data: donation
+  });
+});
+
+/**
+ * @desc    Get my monetary donations
+ * @route   GET /api/donations/monetary/my
+ * @access  Private (donor/sponsor)
+ */
+const getMyMonetaryDonations = asyncHandler(async (req, res, next) => {
+  const donations = await MonetaryDonation.find({ sponsorId: req.user._id })
+    .populate('eventId', 'title')
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    count: donations.length,
+    data: donations
+  });
+});
+
 module.exports = {
   offerItem,
   getMyDonations,
@@ -636,5 +683,7 @@ module.exports = {
   getAllDonations,
   getInKindDonationById,
   ChangeDonationStatus,
-  zeffyWebhook
+  zeffyWebhook,
+  submitMonetaryDonation,
+  getMyMonetaryDonations
 };
