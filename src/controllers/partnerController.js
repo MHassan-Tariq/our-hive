@@ -4,6 +4,7 @@ const InKindDonation = require('../models/InKindDonation');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
 const mongoose = require('mongoose'); // Ensure mongoose is imported for ObjectId validation
+const { notifyAdmins } = require('../utils/notificationService');
 
 /**
  * @desc    Submit or update partner onboarding profile
@@ -474,6 +475,12 @@ const createOpportunity = async (req, res) => {
       status: 'Pending',
     });
 
+    // Notify Admins
+    await notifyAdmins(
+      'New Event Submitted',
+      `Partner "${profile.orgName}" has submitted a new event "${title}" for approval.`
+    );
+
     res.status(201).json({
       success: true,
       message: 'Event created and submitted for approval.',
@@ -635,6 +642,15 @@ const updateOpportunity = async (req, res) => {
     }
 
     await opportunity.save();
+
+    // Notify Admins if it went back to Pending
+    if (needsReapproval && opportunity.status === 'Pending') {
+      const profile = await PartnerProfile.findOne({ userId: req.user._id });
+      await notifyAdmins(
+        'Event Update Submitted',
+        `Partner "${profile.orgName}" has updated event "${opportunity.title}". It is now pending re-approval.`
+      );
+    }
 
     res.status(200).json({
       success: true,

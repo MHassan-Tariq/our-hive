@@ -61,18 +61,31 @@ exports.getNotifications = asyncHandler(async (req, res, next) => {
   });
 
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Map notifications to only include required fields
+  const mapNotification = (n) => ({
+    id: n._id,           // Added id
+    title: n.title,
+    message: n.message,
+    type: n.type,
+    iconType: n.iconType,
+    isRead: n.isRead,
+    createdAt: n.createdAt,
+  });
 
   const segmented = {
-    newUpdates: notifications.filter(
-      (n) => !n.isRead && n.createdAt > twentyFourHoursAgo
-    ),
-    earlier: notifications.filter(
-      (n) => n.isRead || n.createdAt <= twentyFourHoursAgo
-    ),
+    newUpdates: notifications
+      .filter(n => !n.isRead && n.createdAt > twentyFourHoursAgo)
+      .map(mapNotification),
+    earlier: notifications
+      .filter(n => n.isRead || n.createdAt <= twentyFourHoursAgo)
+      .map(mapNotification),
   };
 
   res.status(200).json({
     success: true,
+    unreadCount,
     data: segmented,
   });
 });
@@ -94,6 +107,20 @@ exports.markNotificationAsRead = asyncHandler(async (req, res, next) => {
   }
 
   res.status(200).json({ success: true, data: notification });
+});
+
+/**
+ * @desc    Mark all notifications as read
+ * @route   PATCH /api/user/notifications/read-all
+ * @access  Private
+ */
+exports.markAllNotificationsAsRead = asyncHandler(async (req, res, next) => {
+  await Notification.updateMany(
+    { userId: req.user._id, isRead: false },
+    { isRead: true }
+  );
+
+  res.status(200).json({ success: true, message: 'All notifications marked as read' });
 });
 
 /**
@@ -162,6 +189,28 @@ exports.updateSettings = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: user.preferences,
+  });
+});
+
+/**
+ * @desc    Update push token (OneSignal Player ID)
+ * @route   PATCH /api/user/push-token
+ * @access  Private
+ */
+exports.updatePushToken = asyncHandler(async (req, res, next) => {
+  const { playerId } = req.body;
+
+  if (!playerId) {
+    return next(new ErrorResponse('Please provide a OneSignal Player ID', 400));
+  }
+
+  await User.findByIdAndUpdate(req.user._id, {
+    $set: { 'preferences.oneSignalUserId': playerId }
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Push token updated successfully'
   });
 });
 

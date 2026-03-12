@@ -6,9 +6,11 @@ const {
   selectRole,
   getNotifications,
   markNotificationAsRead,
+  markAllNotificationsAsRead,
   getSettings,
   updateSettings,
   updateProfile,
+  updatePushToken,
 } = require('../controllers/userController');
 
 router.use(protect);
@@ -110,6 +112,7 @@ router.get('/notifications', getNotifications);
  *         description: Notification not found
  */
 router.patch('/notifications/:id/read', markNotificationAsRead);
+router.patch('/notifications/read-all', markAllNotificationsAsRead);
 
 /**
  * @swagger
@@ -138,6 +141,29 @@ router.patch('/notifications/:id/read', markNotificationAsRead);
  *         description: User not a visitor or invalid role
  */
 router.patch('/select-role', authorize('visitor'), selectRole);
+
+/**
+ * @swagger
+ * /api/user/push-token:
+ *   patch:
+ *     summary: Update OneSignal push token
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [playerId]
+ *             properties:
+ *               playerId: { type: string }
+ *     responses:
+ *       200:
+ *         description: Token updated.
+ */
+router.patch('/push-token', updatePushToken);
 
 /**
  * @swagger

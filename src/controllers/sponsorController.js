@@ -6,6 +6,7 @@ const ActivityLog = require('../models/ActivityLog');
 const Campaign = require('../models/Campaign');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendNotification, notifyAdmins } = require('../utils/notificationService');
 
 /**
  * @desc    Simulate a monetary donation and update tier
@@ -88,6 +89,21 @@ const donate = asyncHandler(async (req, res, next) => {
     relatedId: transaction._id,
     relatedModel: 'MonetaryDonation',
   });
+
+  // OneSignal Notification to Sponsor
+  await sendNotification(
+    req.user._id,
+    'Donation Received',
+    `Thank you! Your donation of $${amount} has been received and will provide ${mealsProvided} meals.`,
+    'update',
+    'checkmark'
+  );
+
+  // Notify Admins
+  await notifyAdmins(
+    'New Donation Received',
+    `${req.user.firstName} ${req.user.lastName} has donated $${amount} to ${projectTitle || 'General Support'}.`
+  );
 
   res.status(200).json({
     success: true,

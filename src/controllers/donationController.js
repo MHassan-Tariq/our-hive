@@ -6,6 +6,7 @@ const VolunteerProfile = require('../models/VolunteerProfile');
 const DonorProfile = require('../models/DonorProfile');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendNotification } = require('../utils/notificationService');
 
 /**
  * @desc    Get donor dashboard overview
@@ -142,6 +143,15 @@ const offerItem = asyncHandler(async (req, res, next) => {
     additionalNotes,
     petInfo,
   });
+
+  // OneSignal Notification to Donor
+  await sendNotification(
+    req.user._id,
+    'Donation Offer Received',
+    `Thank you! Your donation offer for "${title}" has been received and is pending review.`,
+    'update',
+    'checkmark'
+  );
 
   res.status(201).json({
     success: true,
@@ -430,6 +440,15 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
 
   donation.status = status;
   await donation.save();
+
+  // OneSignal Notification to Donor
+  await sendNotification(
+    donation.donorId,
+    'Donation Update',
+    `The status of your donation "${donation.itemName}" has been updated to ${status}.`,
+    'update',
+    'info'
+  );
   res.status(200).json({
     success: true,
     message: "Donation status updated successfully",
@@ -601,6 +620,15 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
 
     console.log(`✅ Sponsor profile updated. New tier: ${Sponsor.getTier(newTotal)}`);
 
+    // OneSignal Notification for Payment
+    await sendNotification(
+      donor._id,
+      'Payment Received',
+      `Success! Your donation of ${amount} ${currency || 'USD'} has been processed. Thank you for your support!`,
+      'approval',
+      'checkmark'
+    );
+
     res.status(200).json({
       success: true,
       message: 'Payment received and processed successfully',
@@ -645,6 +673,15 @@ const submitMonetaryDonation = asyncHandler(async (req, res, next) => {
     status: 'pending',
     paymentMethod: 'Zeffy'
   });
+
+  // OneSignal Notification for Pledge
+  await sendNotification(
+    req.user._id,
+    'Donation Pledge Recorded',
+    `Your pledge for "${campaign.title}" is recorded. Please tap to complete your donation on Zeffy.`,
+    'update',
+    'info'
+  );
 
   res.status(201).json({
     success: true,

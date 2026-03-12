@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 const cloudinary = require('../utils/cloudinary');
 const fs = require('fs');
+const { sendNotification } = require('../utils/notificationService');
 
 /**
  * @desc    Save / update a volunteer's profile
@@ -135,6 +136,15 @@ const joinOpportunity = async (req, res) => {
       relatedId: opportunity._id,
       relatedModel: 'Opportunity',
     });
+
+    // OneSignal Notification to Volunteer
+    await sendNotification(
+      volunteerId,
+      'Joined Event',
+      `You have successfully joined "${opportunity.title}". We'll see you there!`,
+      'update',
+      'checkmark'
+    );
 
     res.status(200).json({
       success: true,
@@ -330,6 +340,17 @@ const assignBadges = async (profile) => {
     profile.nextBadgeGoal = profile.totalHours + 10; // Default if no more badges
   }
 
+  // OneSignal Notification for each new badge
+  for (const badgeTitle of newBadges) {
+    await sendNotification(
+      profile.userId,
+      'New Badge Earned!',
+      `Congratulations! You've earned the "${badgeTitle}" badge for your community service.`,
+      'update',
+      'checkmark'
+    );
+  }
+
   return newBadges;
 };
 
@@ -420,6 +441,15 @@ const logHours = async (req, res) => {
         relatedModel: 'Opportunity',
       });
     }
+
+    // OneSignal Notification to Volunteer
+    await sendNotification(
+      req.user._id,
+      'Hours Recorded',
+      `You've successfully logged ${totalHours} hours for ${opportunity ? `"${opportunity.title}"` : 'your community work'}.`,
+      'update',
+      'checkmark'
+    );
 
     const responseData = {
       totalHours: profile.totalHours,

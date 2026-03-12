@@ -11,6 +11,7 @@ const SystemSettings = require('../models/SystemSettings');
 const Badge = require('../models/Badge');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendNotification } = require('../utils/notificationService');
 
 const ROLES = [
   'visitor',
@@ -201,6 +202,14 @@ console.log(status);
       relatedId: profile._id,
       relatedModel: 'PartnerProfile',
     });
+    // OneSignal Notification
+    await sendNotification(
+      profile.userId,
+      'Organization Approved',
+      `Your organization "${profile.orgName}" has been approved!`,
+      'approval',
+      'checkmark'
+    );
   }
 
   res.status(200).json({
@@ -243,6 +252,17 @@ const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
     relatedId: opportunity._id,
     relatedModel: 'Opportunity',
   });
+
+  // OneSignal Notification
+  if (status === 'Confirmed') {
+    await sendNotification(
+      opportunity.partnerId,
+      'Event Approved',
+      `Your event "${opportunity.title}" has been approved for the calendar.`,
+      'approval',
+      'checkmark'
+    );
+  }
 
   res.status(200).json({
     success: true,
@@ -627,6 +647,27 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     relatedId: donation._id,
     relatedModel: 'InKindDonation',
   });
+
+  // OneSignal Notification
+  let title = 'Donation Update';
+  let iconType = 'info';
+  if (status === 'approved') {
+    title = 'Donation Approved';
+    iconType = 'checkmark';
+  } else if (status === 'scheduled') {
+    title = 'Pickup Scheduled';
+  } else if (status === 'completed') {
+    title = 'Donation Completed';
+    iconType = 'checkmark';
+  }
+
+  await sendNotification(
+    donation.donorId,
+    title,
+    `Your donation of "${donation.itemName}" is now ${status}.`,
+    'update',
+    iconType
+  );
 
   res.status(200).json({ success: true, data: donation });
 });
@@ -1245,6 +1286,15 @@ const adminApproveVolunteer = asyncHandler(async (req, res, next) => {
     relatedModel: 'VolunteerProfile',
   });
 
+  // OneSignal Notification
+  await sendNotification(
+    profile.userId,
+    isApproved ? 'Account Approved' : 'Account Update',
+    isApproved ? 'Your volunteer account has been approved.' : 'Your volunteer account approval has been revoked.',
+    isApproved ? 'approval' : 'update',
+    isApproved ? 'checkmark' : 'info'
+  );
+
   res.status(200).json({
     success: true,
     message: `Volunteer ${isApproved ? 'approved' : 'disapproved'} successfully.`,
@@ -1281,6 +1331,15 @@ const adminApproveParticipant = asyncHandler(async (req, res, next) => {
     relatedId: profile._id,
     relatedModel: 'ParticipantProfile',
   });
+
+  // OneSignal Notification
+  await sendNotification(
+    profile.userId,
+    isApproved ? 'Account Approved' : 'Account Update',
+    isApproved ? 'Your participant account has been approved.' : 'Your participant account approval has been revoked.',
+    isApproved ? 'approval' : 'update',
+    isApproved ? 'checkmark' : 'info'
+  );
 
   res.status(200).json({
     success: true,
@@ -1320,6 +1379,15 @@ const adminApproveDetailedIntake = asyncHandler(async (req, res, next) => {
     relatedId: profile._id,
     relatedModel: 'ParticipantProfile',
   });
+
+  // OneSignal Notification
+  await sendNotification(
+    profile.userId,
+    'Intake Approved',
+    'Your detailed intake information has been approved and your account is now fully active.',
+    'approval',
+    'checkmark'
+  );
 
   res.status(200).json({
     success: true,
@@ -1695,6 +1763,15 @@ const adminApproveMonetaryDonation = asyncHandler(async (req, res, next) => {
     }
     await sponsor.save();
   }
+
+  // OneSignal Notification
+  await sendNotification(
+    donation.sponsorId,
+    'Donation Verified',
+    `Thank you! Your donation of $${donation.amount} has been verified as received.`,
+    'approval',
+    'checkmark'
+  );
 
   res.status(200).json({
     success: true,

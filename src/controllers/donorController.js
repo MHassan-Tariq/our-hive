@@ -6,6 +6,7 @@ const InKindDonation = require('../models/InKindDonation');
 const PartnerProfile = require('../models/PartnerProfile');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
+const { sendNotification } = require('../utils/notificationService');
 
 /**
  * @desc    Get donor profile
@@ -221,6 +222,15 @@ const joinEventAsGuest = asyncHandler(async (req, res, next) => {
     { userId },
     { $addToSet: { joinedEvents: opportunity._id } },
     { upsert: true }
+  );
+
+  // OneSignal Notification to Donor
+  await sendNotification(
+    userId,
+    'Event Registration',
+    `You are confirmed as a guest for "${opportunity.title}".`,
+    'update',
+    'checkmark'
   );
 
   res.status(200).json({

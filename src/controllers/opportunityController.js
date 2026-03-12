@@ -5,6 +5,7 @@ const ActivityLog = require('../models/ActivityLog');
 const PartnerProfile = require('../models/PartnerProfile');
 const User = require('../models/User');
 const mongoose = require('mongoose'); 
+const { sendNotification } = require('../utils/notificationService');
 
 /**
  * @desc    Get all upcoming active opportunities (Events)
@@ -105,7 +106,16 @@ const joinEvent = async (req, res) => {
       content: `${req.user.firstName} joined "${opportunity.title}".`,
       relatedId: opportunity._id,
       relatedModel: 'Opportunity',
-    });
+  });
+
+  // OneSignal Notification
+  await sendNotification(
+    userId,
+    'Event Joined',
+    `You have successfully registered for "${opportunity.title}".`,
+    'update',
+    'checkmark'
+  );
 
     res.status(200).json({
       success: true,
@@ -287,6 +297,15 @@ const checkInToEvent = async (req, res) => {
       relatedId: opportunity._id,
       relatedModel: 'Opportunity',
     });
+
+    // OneSignal Notification
+    await sendNotification(
+      userId,
+      'Checked In',
+      `Welcome! You've successfully checked in to "${opportunity.title}".`,
+      'update',
+      'checkmark'
+    );
 
     res.status(200).json({
       success: true,

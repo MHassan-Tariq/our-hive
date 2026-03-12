@@ -4,6 +4,7 @@ const InKindDonation = require('../models/InKindDonation');
 const User = require('../models/User');
 const Campaign = require('../models/Campaign');
 const crypto = require('crypto');
+const { sendNotification } = require('../utils/notificationService');
 
 /**
  * @desc    Save/Update Participant Profile (Comprehensive)
@@ -346,6 +347,15 @@ exports.requestService = async (req, res) => {
       { userId: req.user._id },
       { $push: { vouchers: voucher } },
       { new: true, upsert: true }
+    );
+
+    // OneSignal Notification
+    await sendNotification(
+      req.user._id,
+      'Voucher Ready',
+      `Your voucher for "${service.title || service.itemName}" has been generated. Show the QR code at the event.`,
+      'update',
+      'info'
     );
 
     res.status(201).json({
@@ -810,6 +820,15 @@ exports.completeIntakeSubmission = async (req, res) => {
       { $set: profileUpdate },
       { new: true, upsert: true, runValidators: true }
     ).populate('userId', 'firstName lastName email phone');
+
+    // OneSignal Notification
+    await sendNotification(
+      req.user._id,
+      'Intake Submitted',
+      'Your intake form has been submitted and is now pending review by our team.',
+      'update',
+      'info'
+    );
 
     res.status(200).json({
       success: true,

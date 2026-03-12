@@ -86,6 +86,10 @@ const UserSchema = new mongoose.Schema(
         type: String,
         default: 'English',
       },
+      oneSignalUserId: {
+        type: String,
+        trim: true,
+      },
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,

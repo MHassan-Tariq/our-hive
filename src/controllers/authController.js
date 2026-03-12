@@ -8,6 +8,7 @@ const ActivityLog = require('../models/ActivityLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
+const { notifyAdmins } = require('../utils/notificationService');
 
 // Helper to send token response
 const sendTokenResponse = async (user, statusCode, res) => {
@@ -101,19 +102,30 @@ console.log('Received registration data:', req.body);
   }
 
   // Create Activity Log
-  if (['volunteer', 'partner', 'participant'].includes(user.role)) {
+  if (['volunteer', 'partner', 'participant', 'donor', 'sponsor'].includes(user.role)) {
     let type = 'New Registration';
     if (user.role === 'volunteer') type = 'New Volunteer Interest';
     if (user.role === 'participant') type = 'New Participant Intake';
     if (user.role === 'partner') type = 'New Partner Registration';
+    if (user.role === 'sponsor') type = 'New Sponsor Registration';
+    if (user.role === 'donor') type = 'New Donor Registration';
 
     await ActivityLog.create({
       userId: user._id,
       type,
       content: `${firstName} ${lastName} has registered as a ${user.role}.`,
       relatedId: user._id,
-      relatedModel: user.role === 'participant' ? 'ParticipantProfile' : (user.role === 'volunteer' ? 'VolunteerProfile' : 'PartnerProfile')
+      relatedModel: user.role === 'participant' ? 'ParticipantProfile' : 
+                   (user.role === 'volunteer' ? 'VolunteerProfile' : 
+                   (user.role === 'partner' ? 'PartnerProfile' : 
+                   (user.role === 'donor' ? 'DonorProfile' : 'Sponsor')))
     });
+
+    // Notify Admins
+    await notifyAdmins(
+      'New User Registration',
+      `${user.firstName} ${user.lastName} has registered as a ${user.role}.`
+    );
   }
 
   await sendTokenResponse(user, 201, res);
@@ -294,6 +306,12 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     relatedModel: 'VolunteerProfile'
   });
 
+  // Notify Admins
+  await notifyAdmins(
+    'New Volunteer Registration',
+    `${firstName} ${lastName} has registered as a volunteer and is pending approval.`
+  );
+
   // Return success response
   const token = user.getSignedJwtToken();
   console.log('Registration successful, sending response.');
@@ -372,6 +390,12 @@ const participantRegister = asyncHandler(async (req, res, next) => {
     userId: user._id,
   });
 
+  // Notify Admins
+  await notifyAdmins(
+    'New Participant Registration',
+    `${firstName} ${lastName} has registered as a participant.`
+  );
+
   console.log('Participant registration completed successfully');
 
   await sendTokenResponse(user, 201, res);
@@ -447,6 +471,12 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     relatedId: user._id, // or partnerProfile._id, but User ID is fine for activity log
     relatedModel: 'PartnerProfile'
   });
+
+  // Notify Admins
+  await notifyAdmins(
+    'New Partner Registration',
+    `${firstName} ${lastName} has registered as a partner for "${orgName}".`
+  );
 
   const token = user.getSignedJwtToken();
   res.status(201).json({
