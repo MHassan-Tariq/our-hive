@@ -106,7 +106,38 @@ exports.markNotificationAsRead = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Notification not found', 404));
   }
 
-  res.status(200).json({ success: true, data: notification });
+  // Get updated list
+  const notifications = await Notification.find({ userId: req.user._id }).sort({
+    createdAt: -1,
+  });
+
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const mapNotification = (n) => ({
+    id: n._id,
+    title: n.title,
+    message: n.message,
+    type: n.type,
+    iconType: n.iconType,
+    isRead: n.isRead,
+    createdAt: n.createdAt,
+  });
+
+  const segmented = {
+    newUpdates: notifications
+      .filter(n => !n.isRead && n.createdAt > twentyFourHoursAgo)
+      .map(mapNotification),
+    earlier: notifications
+      .filter(n => n.isRead || n.createdAt <= twentyFourHoursAgo)
+      .map(mapNotification),
+  };
+
+  res.status(200).json({
+    success: true,
+    unreadCount,
+    data: segmented,
+  });
 });
 
 /**
@@ -120,7 +151,37 @@ exports.markAllNotificationsAsRead = asyncHandler(async (req, res, next) => {
     { isRead: true }
   );
 
-  res.status(200).json({ success: true, message: 'All notifications marked as read' });
+  // Get updated list
+  const notifications = await Notification.find({ userId: req.user._id }).sort({
+    createdAt: -1,
+  });
+
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const mapNotification = (n) => ({
+    id: n._id,
+    title: n.title,
+    message: n.message,
+    type: n.type,
+    iconType: n.iconType,
+    isRead: n.isRead,
+    createdAt: n.createdAt,
+  });
+
+  const segmented = {
+    newUpdates: notifications
+      .filter(n => !n.isRead && n.createdAt > twentyFourHoursAgo)
+      .map(mapNotification),
+    earlier: notifications
+      .filter(n => n.isRead || n.createdAt <= twentyFourHoursAgo)
+      .map(mapNotification),
+  };
+
+  res.status(200).json({
+    success: true,
+    unreadCount: 0,
+    data: segmented,
+  });
 });
 
 /**
