@@ -7,22 +7,10 @@ const ActivityLogSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-   type: {
-  type: String,
-  required: true,
-  enum: [
-    'Submission Approved',
-    'Profile Updated',
-    'New Volunteer Interest',
-    'New Pickup Assigned',
-    'New Participant Intake',
-    'Volunteer Hours Logged',
-    'New In-Kind Donation',
-    'New Monetary Donation',
-    'New Partner Registration',
-    'New Registration',  
-  ],
-},
+    type: {
+      type: String,
+      required: true,
+    },
     content: {
       type: String,
       required: true,
@@ -33,16 +21,7 @@ const ActivityLogSchema = new mongoose.Schema(
     },
     relatedModel: {
       type: String,
-      enum: [
-        'Opportunity',
-        'InKindDonation',
-        'PartnerProfile',
-        'MonetaryDonation',
-        'Sponsor',
-        'DonorProfile',
-        'ParticipantProfile',
-        'VolunteerProfile',
-      ],
+
       default: null,
     },
   },
