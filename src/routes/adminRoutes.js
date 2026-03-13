@@ -8,6 +8,7 @@ const {
   updatePartnerStatus,
   updateOpportunityStatus,
   addVolunteerHours,
+  adminApproveVolunteerHours,
   getFinances,
   getParticipantSummary,
   adminListParticipants,
@@ -490,6 +491,40 @@ router.patch('/opportunities/:id/status', updateOpportunityStatus);
  *         description: Volunteer profile not found
  */
 router.patch('/volunteer/add-hours/:id', addVolunteerHours);
+
+/**
+ * @swagger
+ * /api/admin/volunteer/approve-hours/{logId}:
+ *   patch:
+ *     summary: Approve or reject pending volunteer hours
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: logId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: VolunteerLog document _id
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [approved, rejected]
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       400:
+ *         description: Invalid status or log not found/already processed
+ */
+router.patch('/volunteer/approve-hours/:logId', adminApproveVolunteerHours);
 
 /**
  * @swagger

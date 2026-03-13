@@ -265,16 +265,21 @@ console.log(status);
  * @access  Private (Admin only)
  */
 const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body;
+  const { status, rejectionReason } = req.body;
   const validStatuses = ['Draft', 'Confirmed', 'Pending', 'Completed', 'Cancelled', 'Rejected'];
 
   if (!validStatuses.includes(status)) {
     return next(new ErrorResponse(`Status must be one of: ${validStatuses.join(', ')}`, 400));
   }
 
+  const updateFields = { status };
+  if (status === 'Rejected' && rejectionReason) {
+    updateFields.rejectionReason = rejectionReason;
+  }
+
   const opportunity = await Opportunity.findByIdAndUpdate(
     req.params.id,
-    { status },
+    updateFields,
     { new: true, runValidators: true }
   );
 
@@ -331,18 +336,14 @@ const addVolunteerHours = asyncHandler(async (req, res, next) => {
 
   const numericHours = Number(hours);
 
-  const profile = await VolunteerProfile.findByIdAndUpdate(
-    req.params.id,
-    { $inc: { totalHours: numericHours } }, // atomic increment
-    { new: true }
-  );
+  const profile = await VolunteerProfile.findById(req.params.id);
 
   if (!profile) {
     return next(new ErrorResponse('Volunteer profile not found', 404));
   }
 
-  // Create a volunteer log entry for this addition
-  await VolunteerLog.create({
+  // Create a volunteer log entry for this addition as pending
+  const log = await VolunteerLog.create({
     userId: profile.userId,
     hoursLogged: numericHours,
     date: new Date(),
@@ -350,14 +351,74 @@ const addVolunteerHours = asyncHandler(async (req, res, next) => {
     endTime: '05:00 PM',
     category: req.body.category || 'Administrative / Manual Entry',
     notes: req.body.description || 'Verified hours added by admin',
-    opportunityId: req.body.opportunityId || null
+    opportunityId: req.body.opportunityId || null,
+    status: 'pending' // Pending admin approval as per requirements
   });
 
   res.status(200).json({
     success: true,
-    message: `Added ${numericHours} hours. Total hours: ${profile.totalHours}.`,
+    message: `Added ${numericHours} hours. They are currently pending approval.`,
     data: profile,
+    log: log // Return the created log so the frontend has the real ID
   });
+});
+
+/**
+ * @desc    Approve or reject pending volunteer hours
+ * @route   PATCH /api/admin/volunteer/approve-hours/:logId
+ * @access  Private (Admin only)
+ */
+const adminApproveVolunteerHours = asyncHandler(async (req, res, next) => {
+  const { status } = req.body; // 'approved' or 'rejected'
+  
+  if (!['approved', 'rejected'].includes(status)) {
+    return next(new ErrorResponse('Invalid status. Must be approved or rejected.', 400));
+  }
+
+  const log = await VolunteerLog.findById(req.params.logId);
+  
+  if (!log) {
+    return next(new ErrorResponse('Volunteer log not found', 404));
+  }
+
+  if (log.status !== 'pending') {
+    return next(new ErrorResponse(`These hours have already been ${log.status}.`, 400));
+  }
+
+  log.status = status;
+  await log.save();
+
+  if (status === 'approved') {
+    // 2. Update the profile totals since they are now approved
+    let profile = await VolunteerProfile.findOne({ userId: log.userId });
+    if (!profile) {
+      profile = new VolunteerProfile({ userId: log.userId });
+    }
+
+    profile.totalHours = (profile.totalHours || 0) + log.hoursLogged;
+    profile.hoursThisYear = (profile.hoursThisYear || 0) + log.hoursLogged;
+    await profile.save();
+
+    // Notification
+    await sendNotification(
+      log.userId,
+      'Hours Approved',
+      `Your submission of ${log.hoursLogged} hours has been approved!`,
+      'update',
+      'checkmark'
+    );
+  } else {
+    // rejected
+    await sendNotification(
+      log.userId,
+      'Hours Update',
+      `Your submission of ${log.hoursLogged} hours was not approved.`,
+      'update',
+      'info'
+    );
+  }
+
+  res.status(200).json({ success: true, data: log });
 });
 
 /**
@@ -2179,6 +2240,7 @@ module.exports = {
   updatePartnerStatus, 
   updateOpportunityStatus,
   addVolunteerHours, 
+  adminApproveVolunteerHours,
   getFinances, 
   getParticipantSummary,
   adminListParticipants,
