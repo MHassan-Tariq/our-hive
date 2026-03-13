@@ -8,7 +8,7 @@ const ActivityLog = require('../models/ActivityLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
-const { notifyAdmins, sendNotification } = require('../utils/notificationService');
+const { notifyAdmins, sendNotification, sendWelcomeNotification } = require('../utils/notificationService');
 
 // Helper to send token response
 const sendTokenResponse = async (user, statusCode, res) => {
@@ -40,7 +40,7 @@ const sendTokenResponse = async (user, statusCode, res) => {
 };
 
 const register = asyncHandler(async (req, res, next) => {
-  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability } = req.body;
+  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability, playerId } = req.body;
   console.log('\n========== REGISTRATION START ==========');
   console.log('1. Received entire request body:', req.body);
   console.log('   - phone value:', phone, '| type:', typeof phone);
@@ -85,6 +85,11 @@ const register = asyncHandler(async (req, res, next) => {
     role: role || 'visitor',
     isApproved: role === 'sponsor' ? true : false,
     mailingAddress,
+    preferences: {
+      notificationEnabled: true,
+      language: 'English',
+      oneSignalUserId: playerId || ''
+    }
   });
   console.log('3. User CREATED in database:');
   console.log('   - _id:', user._id);
@@ -151,16 +156,8 @@ const register = asyncHandler(async (req, res, next) => {
       `${user.firstName} ${user.lastName} has registered as a ${user.role}.`
     );
 
-    // Notify Sponsor of successful registration
-    if (user.role === 'sponsor') {
-      await sendNotification(
-        user._id,
-        'Account Registration Successful',
-        'Welcome! Your sponsor account has been registered successfully. You can now start supporting our community initiatives.',
-        'system',
-        'checkmark'
-      );
-    }
+    // Send Welcome Notification to User
+    await sendWelcomeNotification(user._id, user.firstName, user.role);
   }
 
   await sendTokenResponse(user, 201, res);
@@ -173,7 +170,7 @@ const register = asyncHandler(async (req, res, next) => {
  */
 const volunteerRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Volunteer Registration Started ---');
-  let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress } = req.body;
+  let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress, playerId } = req.body;
   console.log('Received body:', req.body);
 
   // Handle single "fullName" field from UI if firstName/lastName missing
@@ -308,7 +305,12 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     role: 'volunteer',
     isApproved: false,
     mailingAddress,
-    profilePictureUrl
+    profilePictureUrl,
+    preferences: {
+      notificationEnabled: true,
+      language: 'English',
+      oneSignalUserId: playerId || ''
+    }
   });
   console.log('User created:', { id: user._id, email: user.email });
 
@@ -347,6 +349,9 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     `${firstName} ${lastName} has registered as a volunteer and is pending approval.`
   );
 
+  // Send Welcome Notification to Volunteer
+  await sendWelcomeNotification(user._id, firstName, 'volunteer');
+
   // Return success response
   const token = user.getSignedJwtToken();
   console.log('Registration successful, sending response.');
@@ -375,7 +380,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
  */
 const participantRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Participant Registration Started ---');
-  let { fullName, email, password, phone, mailingAddress } = req.body;
+  let { fullName, email, password, phone, mailingAddress, playerId } = req.body;
   console.log('Received body:', req.body);
 
   // Validate required fields
@@ -415,6 +420,11 @@ const participantRegister = asyncHandler(async (req, res, next) => {
     role: 'participant',
     mailingAddress,
     isApproved: false, // Participants need approval
+    preferences: {
+      notificationEnabled: true,
+      language: 'English',
+      oneSignalUserId: playerId || ''
+    }
   });
 
   console.log('User created:', { id: user._id, email: user.email });
@@ -430,6 +440,9 @@ const participantRegister = asyncHandler(async (req, res, next) => {
     'New Participant Registration',
     `${firstName} ${lastName} has registered as a participant.`
   );
+
+  // Send Welcome Notification to Participant
+  await sendWelcomeNotification(user._id, firstName, 'participant');
 
   console.log('Participant registration completed successfully');
 
@@ -462,7 +475,8 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     orgType,
     orgAddress,
     website,
-    intendedRoles
+    intendedRoles,
+    playerId
   } = req.body;
 
   
@@ -500,6 +514,7 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
   const user = await User.create({
     firstName: firstName || "",
     lastName: lastName || "",
+    oneSignalUserId: playerId || "",
     email,
     password,
     phone,
@@ -542,6 +557,9 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     `${firstName || ""} ${lastName || ""} has registered as a partner for "${orgName}".`
   );
 
+  // Send Welcome Notification to Partner
+  await sendWelcomeNotification(user._id, firstName || "Partner", 'partner');
+
   // Notify partner
   await sendNotification(
     user._id,
@@ -573,23 +591,31 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const login = asyncHandler(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, playerId } = req.body;
 
   // Validate input
   if (!email || !password) {
     return next(new ErrorResponse('Please provide both email and password', 400));
   }
 
-  // Find user with password field included
+  // Find user with password
   const user = await User.findOne({ email }).select('+password');
   if (!user) {
     return next(new ErrorResponse('Invalid credentials', 401));
   }
 
+  console.log("Player ID:", playerId);
+
   // Check password
   const isMatch = await user.matchPassword(password);
   if (!isMatch) {
     return next(new ErrorResponse('Invalid credentials', 401));
+  }
+
+  // Save OneSignal Player ID if provided
+  if (playerId) {
+    user.preferences.oneSignalUserId = playerId;
+    await user.save({ validateBeforeSave: false });
   }
 
   // Check volunteer or partner approval status
@@ -599,11 +625,12 @@ const login = asyncHandler(async (req, res, next) => {
       Isapproved: false,
       role: user.role,
       success: false,
-      message: 'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
+      message:
+        'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
     });
   }
 
-  // If the user is approved, send token response
+  // Send token response
   await sendTokenResponse(user, 200, res);
 });
 
