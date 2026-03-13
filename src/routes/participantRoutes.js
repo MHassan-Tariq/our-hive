@@ -542,7 +542,7 @@ router.get('/pantries', getPantries);
  *       '500':
  *         description: Server error
  */
-router.patch('/personal-info', upload.single('profileImage'), updatePersonalInfo);
+router.patch('/personal-info', upload.single('profilePictureUrl'), updatePersonalInfo);
 
 /**
  * @swagger

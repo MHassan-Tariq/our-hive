@@ -172,7 +172,7 @@ exports.saveProfile = async (req, res) => {
 exports.getParticipantProfile = async (req, res) => {
   try {
     const profile = await ParticipantProfile.findOne({ userId: req.user._id })
-      .populate('userId', 'firstName lastName email phone gender profileImage');
+      .populate('userId', 'firstName lastName email phone gender profilePictureUrl');
 
     if (!profile) {
       return res.status(404).json({ success: false, message: 'Profile not found.' });
@@ -201,7 +201,7 @@ exports.getParticipantProfile = async (req, res) => {
         // Basic Information
         name: `${profile.userId.firstName} ${profile.userId.lastName}`,
         participantId: profile.participantId,
-        profileImage: profile.userId.profileImage || '',
+        profileImage: profile.userId.profilePictureUrl || '',
         
         // Personal Information
         personalInfo: {
@@ -891,7 +891,7 @@ exports.updatePersonalInfo = async (req, res, next) => {
 
     console.log('Received request body:', req.body);
 
-    // Handle profileImage if file is uploaded
+    // Handle profilePictureUrl if file is uploaded
     let profileImageUrl = null;
     if (req.file) {
       profileImageUrl = req.file.path || req.file.secure_url || req.file.url;
@@ -922,7 +922,7 @@ exports.updatePersonalInfo = async (req, res, next) => {
     if (phone) userUpdates.phone = phone;
     if (email) userUpdates.email = email;
     if (gender) userUpdates.gender = gender;
-    if (profileImageUrl) userUpdates.profileImage = profileImageUrl;
+    if (profileImageUrl) userUpdates.profilePictureUrl = profileImageUrl;
 
     console.log('User updates object:', userUpdates);
 
@@ -932,7 +932,7 @@ exports.updatePersonalInfo = async (req, res, next) => {
       console.log('User model updated successfully:', updatedUser);
     }
 
-    // Update ParticipantProfile with address and personal info (including gender, dateOfBirth, profileImage)
+    // Update ParticipantProfile with address and personal info (including gender, dateOfBirth, profilePictureUrl)
     const profileUpdates = {
       dateOfBirth,
       gender,
@@ -975,7 +975,7 @@ exports.updatePersonalInfo = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           gender: user.gender,
-          profileImage: user.profileImage,
+          profileImage: user.profilePictureUrl,
           dateOfBirth: profile.dateOfBirth,
           race: profile.race,
           ethnicity: profile.ethnicity
