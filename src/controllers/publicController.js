@@ -310,64 +310,78 @@ exports.getDistributionSchedule = async (req, res) => {
  */
 exports.getOpportunityDetails = async (req, res) => {
   try {
+    console.log('========== getOpportunityDetails called ==========');
+    console.log(`Route: GET ${req.originalUrl}`);
+    console.log('User:', req.user ? { id: req.user._id, email: req.user.email, role: req.user.role } : 'Guest');
+
     const opportunity = await Opportunity.findById(req.params.id)
       .populate('partnerId', 'firstName lastName email profilePictureUrl orgName phone');
 
     if (!opportunity) {
+      console.log('❌ Opportunity not found for ID:', req.params.id);
       return res.status(404).json({ success: false, message: 'Opportunity not found.' });
     }
 
-    // Convert to plain object to manipulate for the public payload
-    const publicOpportunity = opportunity.toObject();
+    console.log('✅ Opportunity found:', opportunity._id);
 
-    // Check if current user is registered
+    const publicOpportunity = opportunity.toObject();
     const currentUserId = req.user ? req.user._id : null;
+
     publicOpportunity.isRegistered = currentUserId
       ? publicOpportunity.attendees.some(id => id.toString() === currentUserId.toString())
       : false;
 
-    // Count donors among attendees for public response
+    console.log('Current user registered status:', publicOpportunity.isRegistered);
+
     const donors = await User.find({
       _id: { $in: publicOpportunity.attendees },
       role: 'donor'
     });
     publicOpportunity.totalDonors = donors.length;
 
-    // Fetch Partner Details if applicable
+    console.log('Total donors among attendees:', publicOpportunity.totalDonors);
+
     if (publicOpportunity.partnerId) {
+      console.log('Partner ID populated:', publicOpportunity.partnerId._id);
       const partnerProfile = await PartnerProfile.findOne({ userId: publicOpportunity.partnerId._id });
+
       if (partnerProfile) {
-        // Enrich the partnerId object directly for consistency with list views
+        console.log('PartnerProfile found:', partnerProfile._id);
         publicOpportunity.partnerId.orgName = partnerProfile.orgName;
         publicOpportunity.partnerId.organizationLogoUrl = partnerProfile.organizationLogoUrl;
-        
-        // Also provide these at the top level as the mobile app might expect them there
         publicOpportunity.organizerName = partnerProfile.orgName;
         publicOpportunity.organizerLogo = partnerProfile.organizationLogoUrl;
-        
-        // Ensure profilePictureUrl is also set to the logo for compatibility
         publicOpportunity.partnerId.profilePictureUrl = partnerProfile.organizationLogoUrl;
+
+        // Use phone from partnerProfile if User.phone is empty
+        publicOpportunity.organizerPhone = publicOpportunity.partnerId.phone || partnerProfile.phone || '';
+        console.log('Organizer phone assigned from partnerProfile/User:', publicOpportunity.organizerPhone);
+      } else {
+        publicOpportunity.organizerPhone = publicOpportunity.partnerId.phone || '';
+        console.log('Organizer phone assigned from partner User only:', publicOpportunity.organizerPhone);
       }
     }
-    
-    // Fallback for organizerName if still missing
+
     if (!publicOpportunity.organizerName && publicOpportunity.partnerId) {
       publicOpportunity.organizerName = `${publicOpportunity.partnerId.firstName} ${publicOpportunity.partnerId.lastName}`;
     }
-    
-    publicOpportunity.organizerPhone = publicOpportunity.partnerId?.phone || '';
 
-    // Strip out sensitive inner details
     delete publicOpportunity.attendees;
+
+    console.log('Returning publicOpportunity:', {
+      _id: publicOpportunity._id,
+      organizerName: publicOpportunity.organizerName,
+      organizerPhone: publicOpportunity.organizerPhone
+    });
 
     res.status(200).json({
       success: true,
       data: publicOpportunity
     });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Error in getOpportunityDetails:', err);
     if (err.kind === 'ObjectId') {
-         return res.status(404).json({ success: false, message: 'Opportunity not found.' });
+      return res.status(404).json({ success: false, message: 'Opportunity not found.' });
     }
     res.status(500).json({ success: false, message: 'Server error retrieving opportunity details' });
   }

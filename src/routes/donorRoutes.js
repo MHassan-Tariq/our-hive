@@ -139,7 +139,7 @@ router.get('/joined-opportunities', getDonorJoinedOpportunities);
  *       200:
  *         description: Successfully joined event
  */
-router.post('/events/:id/join', joinEventAsGuest);
+router.post('/events/join', joinEventAsGuest);
 
 /**
  * @swagger

@@ -288,7 +288,7 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
   if (Name && (!firstName || !lastName)) {
     const parts = Name.trim().split(' ');
     if (!firstName) firstName = parts[0] || '';
-    if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+    if (!lastName) lastName = parts.slice(1).join(' ') || ' ';
   }
 
   if (firstName) updateData.firstName = firstName;

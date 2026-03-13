@@ -8,7 +8,7 @@ const ActivityLog = require('../models/ActivityLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
-const { notifyAdmins } = require('../utils/notificationService');
+const { notifyAdmins, sendNotification } = require('../utils/notificationService');
 
 // Helper to send token response
 const sendTokenResponse = async (user, statusCode, res) => {
@@ -41,14 +41,18 @@ const sendTokenResponse = async (user, statusCode, res) => {
 
 const register = asyncHandler(async (req, res, next) => {
   let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability } = req.body;
-console.log('Received registration data:', req.body);
+  console.log('\n========== REGISTRATION START ==========');
+  console.log('1. Received entire request body:', req.body);
+  console.log('   - phone value:', phone, '| type:', typeof phone);
+  console.log('   - mailingAddress value:', mailingAddress, '| type:', typeof mailingAddress);
+  console.log('   - role value:', role);
   // Handle single "fullName" field from UI if firstName/lastName missing
   if (fullName && (!firstName || !lastName)) {
     const parts = fullName.trim().split(' ');
     if (!firstName) firstName = parts[0] || '';
-    if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+    if (!lastName) lastName = parts.slice(1).join(' ') || '';
   }
-
+ 
   // Check if email or phone already exists
   const existingEmail = await User.findOne({ email });
   if (existingEmail) {
@@ -63,6 +67,15 @@ console.log('Received registration data:', req.body);
   }
 
   // Create user
+  console.log('\n2. About to create User document with:', {
+    firstName,
+    lastName,
+    email,
+    phone,
+    role: role || 'visitor',
+    isApproved: role === 'sponsor' ? true : false,
+    mailingAddress,
+  });
   const user = await User.create({
     firstName,
     lastName,
@@ -73,6 +86,12 @@ console.log('Received registration data:', req.body);
     isApproved: role === 'sponsor' ? true : false,
     mailingAddress,
   });
+  console.log('3. User CREATED in database:');
+  console.log('   - _id:', user._id);
+  console.log('   - phone (in DB):', user.phone);
+  console.log('   - mailingAddress (in DB):', user.mailingAddress);
+  console.log('   - role:', user.role);
+  console.log('   - Full user object:', JSON.stringify(user, null, 2));
 
   // Create empty profile based on role
   switch (user.role) {
@@ -94,7 +113,12 @@ console.log('Received registration data:', req.body);
       await Sponsor.create({ userId: user._id });
       break;
     case 'donor':
-      await DonorProfile.create({ userId: user._id ,isApproved: true});
+      await DonorProfile.create({ 
+        userId: user._id,
+        phone: phone || user.phone,
+        mailingAddress: mailingAddress,
+        isApproved: true
+      });
       break;
     case 'participant':
       await ParticipantProfile.create({ userId: user._id });
@@ -126,6 +150,17 @@ console.log('Received registration data:', req.body);
       'New User Registration',
       `${user.firstName} ${user.lastName} has registered as a ${user.role}.`
     );
+
+    // Notify Sponsor of successful registration
+    if (user.role === 'sponsor') {
+      await sendNotification(
+        user._id,
+        'Account Registration Successful',
+        'Welcome! Your sponsor account has been registered successfully. You can now start supporting our community initiatives.',
+        'system',
+        'checkmark'
+      );
+    }
   }
 
   await sendTokenResponse(user, 201, res);
@@ -145,7 +180,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
   if (fullName && (!firstName || !lastName)) {
     const parts = fullName.trim().split(' ');
     if (!firstName) firstName = parts[0] || '';
-    if (!lastName) lastName = parts.slice(1).join(' ') || 'User';
+    if (!lastName) lastName = parts.slice(1).join(' ') || '';
     console.log('Parsed names from fullName:', { firstName, lastName });
   }
 
@@ -407,10 +442,19 @@ const participantRegister = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const partnerRegister = asyncHandler(async (req, res, next) => {
+  
+    console.log("=== Partner Register API Hit ===");
+  
+  // Log entire request body
+  console.log("Full request body:", JSON.stringify(req.body, null, 2));
+  
+  // Optional: log all keys coming in
+  console.log("Keys in request body:", Object.keys(req.body));
   let {
     firstName,
     lastName,
     fullName,
+    name,
     email,
     password,
     phone,
@@ -421,68 +465,99 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     intendedRoles
   } = req.body;
 
-  // Handle fullName field - split into firstName and lastName
-  if (fullName && (!firstName || !lastName)) {
-    const parts = fullName.trim().split(' ');
-    if (!firstName) firstName = parts[0] || '';
-    if (!lastName) lastName = parts.slice(1).join(' ') || 'Partner';
+  
+  // Handle name field
+  if (name && (!firstName || !lastName)) {
+    const parts = name.trim().split(" ");
+    firstName = parts[0] || "";
+    lastName = parts.slice(1).join(" ") || "";
   }
 
-  // Check if email or phone already exists
+  // Handle fullName field
+  if (fullName && (!firstName || !lastName)) {
+    const parts = fullName.trim().split(" ");
+    if (!firstName) firstName = parts[0] || "";
+    if (!lastName) lastName = parts.slice(1).join(" ") || "";
+  }
+
+  // Check if email exists
   const existingEmail = await User.findOne({ email });
   if (existingEmail) {
-    return next(new ErrorResponse('A user with that email already exists', 400));
+    return next(new ErrorResponse("A user with that email already exists", 400));
   }
 
+  // Check phone if provided
   if (phone) {
     const existingPhone = await User.findOne({ phone });
     if (existingPhone) {
-      return next(new ErrorResponse('A user with that phone number already exists', 400));
+      return next(
+        new ErrorResponse("A user with that phone number already exists", 400)
+      );
     }
   }
 
-  // Create User - Partners are NOT approved by default
+  // Create user
   const user = await User.create({
-    firstName,
-    lastName,
+    firstName: firstName || "",
+    lastName: lastName || "",
     email,
     password,
     phone,
-    role: 'partner',
+    role: "partner",
     isApproved: false
   });
 
-  // Create Partner Profile
-  await PartnerProfile.create({
+  // Parse intended roles
+  let roles = [];
+  if (Array.isArray(intendedRoles)) {
+    roles = intendedRoles;
+  } else if (typeof intendedRoles === "string") {
+    roles = intendedRoles.split(",").map((r) => r.trim());
+  }
+
+  // Create partner profile
+  const partnerProfile = await PartnerProfile.create({
     userId: user._id,
+    name: `${firstName || ""} ${lastName || ""}`.trim(),
     orgName,
     orgType,
     address: orgAddress,
     website,
-    intendedRoles: Array.isArray(intendedRoles) ? intendedRoles : (intendedRoles ? intendedRoles.split(',').map(r => r.trim()) : []),
-    status: 'Pending'
+    intendedRoles: roles,
+    status: "Pending"
   });
 
-  // Create Activity Log
+  // Create activity log
   await ActivityLog.create({
     userId: user._id,
-    type: 'New Partner Registration',
-    content: `${firstName} ${lastName} has registered as a community partner for "${orgName}".`,
-    relatedId: user._id, // or partnerProfile._id, but User ID is fine for activity log
-    relatedModel: 'PartnerProfile'
+    type: "New Partner Registration",
+    content: `${firstName || ""} ${lastName || ""} has registered as a community partner for "${orgName}".`,
+    relatedId: partnerProfile._id,
+    relatedModel: "PartnerProfile"
   });
 
-  // Notify Admins
+  // Notify admins
   await notifyAdmins(
-    'New Partner Registration',
-    `${firstName} ${lastName} has registered as a partner for "${orgName}".`
+    "New Partner Registration",
+    `${firstName || ""} ${lastName || ""} has registered as a partner for "${orgName}".`
+  );
+
+  // Notify partner
+  await sendNotification(
+    user._id,
+    "Partnership Registration Submitted",
+    `Welcome! Your partnership registration for "${orgName}" has been submitted successfully. Our team will review your application and get back to you soon.`,
+    "system",
+    "checkmark"
   );
 
   const token = user.getSignedJwtToken();
+
   res.status(201).json({
     success: true,
     token,
-    message: 'Partner registration submitted successfully. Your account is pending admin approval.',
+    message:
+      "Partner registration submitted successfully. Your account is pending admin approval.",
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -492,7 +567,6 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     }
   });
 });
-
 /**
  * @desc    Login user
  * @route   POST /api/auth/login

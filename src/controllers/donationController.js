@@ -128,7 +128,7 @@ const offerItem = asyncHandler(async (req, res, next) => {
     } catch (e) { }
   }
 
-  // Create donation
+  // Create donation with 'offered' status
   const donation = await InKindDonation.create({
     donorId: req.user._id,
     title,
@@ -142,6 +142,7 @@ const offerItem = asyncHandler(async (req, res, next) => {
     deliveryMethod,
     additionalNotes,
     petInfo,
+    status: 'offered'  // Explicitly set status to 'offered'
   });
 
   // OneSignal Notification to Donor
@@ -175,14 +176,31 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     ];
   }
 
+  // Get ALL donations posted by this donor
   const donations = await InKindDonation.find(query)
-    .populate('assignedVolunteerId', 'name email')
+    .populate('assignedVolunteerId', 'firstName lastName email phone')
     .sort({ createdAt: -1 });
+
+  console.log(`Donor ${req.user._id} has ${donations.length} donations`);
+
+  // Show ALL donations with status of who claimed them
+  const transformedDonations = donations.map(donation => {
+    const donationObj = donation.toObject();
+    if (donation.assignedVolunteerId) {
+      donationObj.claimedStatus = 'claimed';
+      donationObj.isClaimed = true;
+      donationObj.claimedBy = donation.assignedVolunteerId;
+    } else {
+      donationObj.claimedStatus = 'available';
+      donationObj.isClaimed = false;
+    }
+    return donationObj;
+  });
 
   res.status(200).json({
     success: true,
-    count: donations.length,
-    data: donations,
+    count: transformedDonations.length,
+    data: transformedDonations,
   });
 });
 
@@ -192,15 +210,48 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
  * @access  Private (volunteer)
  */
 const getAvailablePickups = asyncHandler(async (req, res, next) => {
-  const donations = await InKindDonation.find({ status: 'offered' })
-    .populate('donorId', 'name')
-    .select('-pickupAddress')
+  // Show ALL donations with personalized claimed status
+  console.log('getAvailablePickups called for user:', req.user._id);
+  
+  const donations = await InKindDonation.find({})  // Get ALL donations
+    .populate('donorId', 'firstName lastName email')
+    .populate('assignedVolunteerId', 'firstName lastName email')
     .sort({ createdAt: -1 });
+
+  console.log(`Found ${donations.length} offered donations for user ${req.user._id}`);
+
+  // Transform response - show ALL donations with personalized status
+  const transformedDonations = donations.map(donation => {
+    const donationObj = donation.toObject();
+    
+    // If THIS user claimed it
+    if (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+      donationObj.displayStatus = 'claimed';
+      donationObj.isClaimed = true;
+      donationObj.claimedByMe = true;
+    } 
+    // If someone else claimed it
+    else if (donation.assignedVolunteerId) {
+      donationObj.displayStatus = 'unavailable';
+      donationObj.isClaimed = true;
+      donationObj.claimedByMe = false;
+    } 
+    // Not claimed by anyone
+    else {
+      donationObj.displayStatus = 'available';
+      donationObj.isClaimed = false;
+      donationObj.claimedByMe = false;
+    }
+    
+    return donationObj;
+  });
+
+  console.log(`Returning ${transformedDonations.length} donations to user`);
 
   res.status(200).json({
     success: true,
-    count: donations.length,
-    data: donations,
+    count: transformedDonations.length,
+    data: transformedDonations,
   });
 });
 
@@ -216,11 +267,16 @@ const claimDonation = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Donation item not found.', 404));
   }
 
-  if (donation.status !== 'offered') {
-    return next(new ErrorResponse(`This item has already been claimed or is no longer available (status: ${donation.status}).`, 400));
+  // Check if already claimed by someone
+  if (donation.assignedVolunteerId) {
+    if (donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+      return next(new ErrorResponse('You have already claimed this item.', 400));
+    }
+    return next(new ErrorResponse('This item has already been claimed by another volunteer.', 400));
   }
 
-  donation.status = 'approved';
+  // Allow claiming any unclaimed donation regardless of status
+  // Only track that this user has claimed it via assignedVolunteerId
   donation.assignedVolunteerId = req.user._id;
   await donation.save();
 
@@ -243,14 +299,23 @@ const claimDonation = asyncHandler(async (req, res, next) => {
 const getAssignedDonations = asyncHandler(async (req, res, next) => {
   const partnerId = req.user._id;
   const { status, search } = req.query;
+  
+  // Get ALL donations assigned to this partner
   let query = { recipientId: partnerId };
 
   if (status) {
-    if (status === 'pending') query.status = 'claimed';
-    else if (status === 'in-transit') query.status = 'in-transit';
-    else if (status === 'delivered') query.status = 'delivered';
-    else query.status = status;
+    // Optional filter if status is specified
+    if (status === 'pending') {
+      query.status = { $regex: '^(offered|pending)$', $options: 'i' };
+    } else if (status === 'in-transit') {
+      query.status = { $regex: '^in-transit$', $options: 'i' };
+    } else if (status === 'delivered') {
+      query.status = { $regex: '^delivered$', $options: 'i' };
+    } else {
+      query.status = status;
+    }
   }
+  // No default status filter - show all donations for this partner
 
   if (search) {
     query.$or = [
@@ -260,14 +325,35 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
   }
 
   const donations = await InKindDonation.find(query)
-    .populate('donorId', 'name')
-    .populate('assignedVolunteerId', 'name phone')
+    .populate('donorId', 'firstName lastName email')
+    .populate('assignedVolunteerId', 'firstName lastName email phone')
     .sort({ createdAt: -1 });
+
+  console.log(`Found ${donations.length} donations assigned to partner ${partnerId}`);
+
+  // Transform to show ALL assigned donations with personalized display status
+  const transformedDonations = donations.map(donation => {
+    const donationObj = donation.toObject();
+    
+    // Show personalized display status
+    if (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString()) {
+      donationObj.displayStatus = 'claimed';
+      donationObj.claimedByMe = true;
+    } else if (donation.assignedVolunteerId) {
+      donationObj.displayStatus = 'unavailable';
+      donationObj.claimedByMe = false;
+    } else {
+      donationObj.displayStatus = 'available';
+      donationObj.claimedByMe = false;
+    }
+    
+    return donationObj;
+  });
 
   res.status(200).json({
     success: true,
-    count: donations.length,
-    data: donations,
+    count: transformedDonations.length,
+    data: transformedDonations,
   });
 });
 
@@ -361,6 +447,10 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
   const { search, category, status } = req.query;
   console.log(search, 'search', status, 'status', category, 'category');
 
+  // First, check how many total donations exist
+  const totalDonations = await InKindDonation.countDocuments({});
+  console.log(`Total donations in database: ${totalDonations}`);
+
   let query = {};
 
   if (search) {
@@ -375,21 +465,61 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     query.itemCategory = category;
   }
 
-  // ✅ Filter by status (case-insensitive)
-  if (status && status.toLowerCase() !== 'all') {
-    query.status = { $regex: `^${status}$`, $options: 'i' }; // exact match, ignore case
-  }
+  // ✅ Show ALL donations - let the user see all with personalized status
+  // Don't filter by status in database - show everything!
+  
+  console.log('Finding donations with query:', JSON.stringify(query));
 
-  // Fetch donations with donor and recipient details and sort newest first
+  // Fetch ALL donations that are 'offered' with donor and volunteer details
   const donations = await InKindDonation.find(query)
     .populate('donorId', 'firstName lastName email')
+    .populate('assignedVolunteerId', 'firstName lastName email')
     .populate('recipientId', 'firstName lastName email')
     .sort({ createdAt: -1 });
 
+  console.log(`Found ${donations.length} 'offered' donations in database`);
+  
+  // Also check what status values exist
+  const statusCounts = await InKindDonation.aggregate([
+    { $group: { _id: '$status', count: { $sum: 1 } } }
+  ]);
+  console.log('Status distribution:', statusCounts);
+
+  // Transform response - show ALL donations with personalized display status
+  const transformedDonations = donations.map(donation => {
+    const donationObj = donation.toObject();
+    
+    // Personalize status based on who's viewing
+    if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+      // Only THIS user sees 'claimed' status
+      donationObj.displayStatus = 'claimed';
+      donationObj.claimedByMe = true;
+      donationObj.isClaimed = true;
+    } else if (donation.assignedVolunteerId) {
+      // Someone else claimed it - show as unavailable
+      donationObj.displayStatus = 'unavailable';
+      donationObj.claimedByMe = false;
+      donationObj.isClaimed = true;
+    } else {
+      // Available for claiming
+      donationObj.displayStatus = 'available';
+      donationObj.claimedByMe = false;
+      donationObj.isClaimed = false;
+    }
+    
+    return donationObj;
+  });
+
+  console.log(`Returning ${transformedDonations.length} donations with personalized status`);
+
   res.status(200).json({
     success: true,
-    count: donations.length,
-    data: donations,
+    count: transformedDonations.length,
+    data: transformedDonations,
+    debug: {
+      totalInDatabase: totalDonations,
+      statusDistribution: statusCounts
+    }
   });
 });
 
@@ -400,7 +530,7 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
   if (status && typeof status === 'string') {
     status = status.replace(/^["'](.+)["']$/, '$1');
   }
-  const allowedStatuses = ["Available", "Claimed", "PickedUp", "Delivered", "Approved", "All"];
+  const allowedStatuses = ["available", "claimed", "pickedup", "delivered", "approved", "all"];
 
   if (!status || !allowedStatuses.includes(status)) {
     return res.status(400).json({
@@ -474,9 +604,22 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
 
   const donationData = donation.toObject();
 
-  // Convert status to lowercase
-  if (donationData.status) {
-    donationData.status = donationData.status.toLowerCase();
+  // Show personalized display status based on who's viewing
+  if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+    // This user claimed it
+    donationData.displayStatus = 'claimed';
+    donationData.claimedByMe = true;
+    donationData.isClaimed = true;
+  } else if (donation.assignedVolunteerId) {
+    // Someone else claimed it
+    donationData.displayStatus = 'unavailable';
+    donationData.claimedByMe = false;
+    donationData.isClaimed = true;
+  } else {
+    // Available
+    donationData.displayStatus = 'available';
+    donationData.claimedByMe = false;
+    donationData.isClaimed = false;
   }
 
   res.status(200).json({
@@ -551,7 +694,7 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
       // Extract name parts
       const nameParts = (donor_name || 'Anonymous Donor').trim().split(' ');
       const firstName = nameParts[0] || 'Anonymous';
-      const lastName = nameParts.slice(1).join(' ') || 'Donor';
+      const lastName = nameParts.slice(1).join(' ') || '';
 
       donor = await User.create({
         firstName,

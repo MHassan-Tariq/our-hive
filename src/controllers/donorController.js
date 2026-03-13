@@ -42,16 +42,25 @@ const getDonorProfile = asyncHandler(async (req, res, next) => {
   const completedInKind = inKindDonations.filter(d => d.status === 'completed' || d.status === 'Delivered').length;
 
   // Combine profile data - minimal response
+  // Priority: DonorProfile.profilePictureUrl > User.profilePictureUrl
+  const profileImage = profile.profilePictureUrl || user.profilePictureUrl || null;
+
   const profileData = {
-    profileImage: user.profilePictureUrl || null,
+    profileImage: profileImage,
     name: `${user.firstName} ${user.lastName}`.trim(),
     email: user.email,
     phone: user.phone,
-    userId:user._id,
+    userId: user._id,
     address: user.mailingAddress,
     donorSince: user.createdAt,
     totalEventsJoined: profile.joinedEvents ? profile.joinedEvents.length : 0,
     totalDonations: monetaryDonations.length + inKindDonations.length,
+    totalMonetaryDonations: monetaryDonations.length,
+    totalInKindDonations: inKindDonations.length,
+    totalMonetaryAmount: totalMonetaryAmount,
+    totalMealsProvided: totalMealsProvided,
+    completedMonetaryDonations: completedMonetary,
+    completedInKindDonations: completedInKind,
   };
 
   res.status(200).json({
@@ -91,6 +100,12 @@ const updateDonorProfile = asyncHandler(async (req, res, next) => {
  */
 const updateUserProfile = asyncHandler(async (req, res, next) => {
   const { fullName, email, phone, address } = req.body;
+  if (req.file) {
+  console.log("Uploaded file field name:", req.file.fieldname);
+  console.log("File original name:", req.file.originalname);
+  console.log("Stored path:", req.file.path);
+}
+  console.log('updateUserProfile called with data:', { fullName, email, phone, address, file: req.file });
 
   const updateData = {};
 
@@ -137,6 +152,15 @@ const updateUserProfile = asyncHandler(async (req, res, next) => {
 
   if (!user) {
     return next(new ErrorResponse("User not found", 404));
+  }
+
+  // Also update DonorProfile with profile picture if file was uploaded
+  if (req.file) {
+    await DonorProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      { profilePictureUrl: req.file.path },
+      { new: true }
+    );
   }
 
   const profileData = {
@@ -191,7 +215,8 @@ const joinEventAsGuest = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Only donors may join events as guests', 403));
   }
 
-  const id = req.params.id;
+  // const id = req.params.id;
+  const id = req.query.id
   console.log('🔔 joinEventAsGuest called with event ID:', id);
   const opportunity = await Opportunity.findById(id);
 

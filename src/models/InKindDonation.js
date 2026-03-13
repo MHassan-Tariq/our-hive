@@ -33,8 +33,7 @@ const InKindDonationSchema = new mongoose.Schema(
     itemCategory: {
       type: String,
       required: [true, 'Item category is required'],
-      enum: ['Food', 'Clothing', 'Furniture', 'Electronics', 'Other'],
-    },
+     },
     description: {
       type: String,
       required: [true, 'Description is required'],
@@ -62,8 +61,7 @@ const InKindDonationSchema = new mongoose.Schema(
     },
     deliveryMethod: {
       type: String,
-      enum: ['pickup', 'drop-off', 'Courier', 'Shipping'],
-      default: 'pickup',
+       default: 'pickup',
     },
     additionalNotes: {
       type: String,
@@ -86,8 +84,7 @@ const InKindDonationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "scheduled", "completed", "rejected", "claimed", "pickedUp", "Available", "Claimed", "PickedUp","Delivered"],
-      default: "pending",
+       default: "offered",
     },
     rejectionReason: {
       type: String,

@@ -8,7 +8,8 @@ const User = require('../models/User');
 const protect = async (req, res, next) => {
   let token;
 
-  console.log('🔐 Protect middleware triggered');
+  // 🔹 Log which route is being hit
+  console.log(`🔐 Protect middleware triggered — Route: ${req.method} ${req.originalUrl}`);
 
   // 1️⃣ Extract token
   if (
@@ -72,6 +73,9 @@ const protect = async (req, res, next) => {
  */
 const authorize = (...roles) => {
   return (req, res, next) => {
+    // Log route access attempt
+    console.log(`🛡 Authorize check — Route: ${req.method} ${req.originalUrl} — User role: ${req.user?.role}`);
+
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
@@ -89,6 +93,9 @@ const authorize = (...roles) => {
  * still know about the caller when authenticated.
  */
 const optionalProtect = async (req, res, next) => {
+  // Log route being accessed
+  console.log(`🔓 OptionalProtect middleware triggered — Route: ${req.method} ${req.originalUrl}`);
+
   let token;
 
   if (

@@ -16,6 +16,19 @@ const DonorProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    profilePictureUrl: {
+  type: String,
+  default: null,
+},
+phone: {
+  type: String,
+},
+mailingAddress: {
+  type: String,
+},
+preferences: {
+  type: Object,
+},
     totalVolunteerHours: {
       type: Number,
       default: 0,
