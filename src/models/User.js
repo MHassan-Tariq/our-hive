@@ -10,6 +10,7 @@ const ROLES = [
   'donor',
   'sponsor',
   'partner',
+  'moderator',
   'admin',
 ];
 
@@ -62,7 +63,7 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    profileImage: {
+    profilePictureUrl: {
       type: String,
       trim: true,
     },

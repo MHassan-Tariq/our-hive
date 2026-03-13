@@ -13,9 +13,8 @@ const BadgeSchema = new mongoose.Schema(
       trim: true,
     },
     timeRequired: {
-      type: Number,
-      required: [true, 'Time required is required'],
-      min: [0, 'Time required cannot be negative'],
+      type: String,
+      required: [true, 'Please provide time requirements'],
     },
     imageUrl: {
       type: String,

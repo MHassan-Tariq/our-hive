@@ -6,7 +6,10 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'our-hive',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf'],
+    allowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'pdf'],
+    resource_type: 'auto',
+    type: 'upload',
+    access_mode: 'public',
   },
 });
 

@@ -9,6 +9,8 @@ const Campaign = require('../models/Campaign');
 const MonetaryDonation = require('../models/MonetaryDonation');
 const SystemSettings = require('../models/SystemSettings');
 const Badge = require('../models/Badge');
+const AgreementHistory = require('../models/AgreementHistory');
+const VolunteerLog = require('../models/VolunteerLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendNotification } = require('../utils/notificationService');
@@ -20,6 +22,7 @@ const ROLES = [
   'donor',
   'sponsor',
   'partner',
+  'moderator',
   'admin',
 ];
 
@@ -60,6 +63,43 @@ const getAllUsers = asyncHandler(async (req, res, next) => {
       totalResults: total
     },
     data: users,
+  });
+});
+
+/**
+ * @desc    Update a user's role
+ * @route   PATCH /api/admin/users/:id/role
+ * @access  Private (Admin only)
+ */
+const updateUserRole = asyncHandler(async (req, res, next) => {
+  const { role } = req.body;
+
+  if (!role || !ROLES.includes(role)) {
+    return next(new ErrorResponse('Please provide a valid role', 400));
+  }
+
+  console.log('DEBUG: updateUserRole params.id:', req.params.id);
+  console.log('DEBUG: updateUserRole user.id:', req.user.id.toString());
+  console.log('DEBUG: updateUserRole new role:', role);
+
+  if (req.params.id === req.user.id.toString()) {
+    console.log('DEBUG: Prevented self-role change');
+    return next(new ErrorResponse('You cannot change your own role', 400));
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    { role },
+    { new: true, runValidators: true }
+  );
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: user,
   });
 });
 /**
@@ -278,15 +318,22 @@ const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
  * :id — the VolunteerProfile document _id
  */
 const addVolunteerHours = asyncHandler(async (req, res, next) => {
-  const { hours } = req.body;
+  let { hours } = req.body;
+  
+  // Handle cases where hours might be wrapped in an object from the service layer
+  if (hours && typeof hours === 'object' && hours.hours !== undefined) {
+    hours = hours.hours;
+  }
 
-  if (!hours || typeof hours !== 'number' || hours <= 0) {
+  if (hours === undefined || hours === null || isNaN(Number(hours)) || Number(hours) <= 0) {
     return next(new ErrorResponse('Please provide a positive number for hours', 400));
   }
 
+  const numericHours = Number(hours);
+
   const profile = await VolunteerProfile.findByIdAndUpdate(
     req.params.id,
-    { $inc: { totalHours: hours } }, // atomic increment
+    { $inc: { totalHours: numericHours } }, // atomic increment
     { new: true }
   );
 
@@ -294,9 +341,21 @@ const addVolunteerHours = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Volunteer profile not found', 404));
   }
 
+  // Create a volunteer log entry for this addition
+  await VolunteerLog.create({
+    userId: profile.userId,
+    hoursLogged: numericHours,
+    date: new Date(),
+    startTime: '09:00 AM', // Defaults for administrative entries
+    endTime: '05:00 PM',
+    category: req.body.category || 'Administrative / Manual Entry',
+    notes: req.body.description || 'Verified hours added by admin',
+    opportunityId: req.body.opportunityId || null
+  });
+
   res.status(200).json({
     success: true,
-    message: `Added ${hours} hours. Total hours: ${profile.totalHours}.`,
+    message: `Added ${numericHours} hours. Total hours: ${profile.totalHours}.`,
     data: profile,
   });
 });
@@ -612,16 +671,19 @@ const adminListInKindDonations = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
-  const { status, rejectionReason, locationName, storageRoom, storageRack, storageShelf, storageFloor } = req.body;
+  const { status, rejectionReason, locationName, additionalNotes, storageRoom, storageRack, storageShelf, storageFloor } = req.body;
 
-  if (!['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
+  if (status && !['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
     return next(new ErrorResponse('Invalid status', 400));
   }
 
-  const updates = { status };
+  const updates = {};
+  if (status) updates.status = status;
   if (status === 'rejected' && rejectionReason) updates.rejectionReason = rejectionReason;
   
   if (locationName) updates.locationName = locationName;
+  if (additionalNotes !== undefined) updates.additionalNotes = additionalNotes;
+  
   if (storageRoom !== undefined || storageRack !== undefined || storageShelf !== undefined || storageFloor !== undefined) {
     updates['storageDetails.room'] = storageRoom;
     updates['storageDetails.rack'] = storageRack;
@@ -719,12 +781,70 @@ const adminExportInKindDonationsCSV = asyncHandler(async (req, res, next) => {
 const adminGetInKindDonation = asyncHandler(async (req, res, next) => {
   const donation = await InKindDonation.findById(req.params.id)
     .populate('donorId', 'firstName lastName email phone profilePictureUrl');
-  
-  if (!donation) {
-    return next(new ErrorResponse('Donation not found', 404));
+  res.status(200).json({ success: true, data: donation });
+});
+
+/**
+ * @desc    List all partner pickups (In-Kind Donations where donor role is 'partner')
+ * @route   GET /api/admin/partner-pickups
+ * @access  Private (Admin only)
+ */
+const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const { search } = req.query;
+
+  // 1. Find all users with role 'partner'
+  const partnerUsers = await User.find({ role: 'partner' }).select('_id');
+  const partnerUserIds = partnerUsers.map(u => u._id);
+
+  const query = { donorId: { $in: partnerUserIds } };
+
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+
+    // Find partner users matching the search to extract their IDs
+    const matchingUsers = await User.find({
+      role: 'partner',
+      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }]
+    }).select('_id');
+    const matchingUserIds = matchingUsers.map(u => u._id);
+
+    query.$or = [
+      { itemName: regex },
+      { donorName: regex },
+      { donorId: { $in: matchingUserIds } }
+    ];
   }
 
-  res.status(200).json({ success: true, data: donation });
+  const total = await InKindDonation.countDocuments(query);
+  const donations = await InKindDonation.find(query)
+    .populate('donorId', 'firstName lastName email role')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  // Stats for the pickups page
+  const pendingCount = await InKindDonation.countDocuments({ ...query, status: 'pending' });
+  const scheduledCount = await InKindDonation.countDocuments({ ...query, status: 'scheduled' });
+  const completedCount = await InKindDonation.countDocuments({ ...query, status: 'completed' });
+
+  res.status(200).json({
+    success: true,
+    stats: {
+      pendingCount,
+      scheduledCount,
+      completedCount
+    },
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: donations.length
+    },
+    data: donations
+  });
 });
 
 /**
@@ -780,15 +900,31 @@ const adminListVolunteers = asyncHandler(async (req, res, next) => {
  */
 const adminGetVolunteer = asyncHandler(async (req, res, next) => {
   const profile = await VolunteerProfile.findById(req.params.id)
-    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt isApproved');
+    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt isApproved')
+    .populate({
+      path: 'joinedOpportunities',
+      select: 'title description location date category status imageurl',
+      populate: {
+        path: 'partnerId',
+        select: 'orgName organizationName'
+      }
+    });
 
   if (!profile) {
     return next(new ErrorResponse('Volunteer profile not found', 404));
   }
 
+  // Fetch volunteer logs
+  const logs = await VolunteerLog.find({ userId: profile.userId })
+    .populate('opportunityId', 'title')
+    .sort({ date: -1, createdAt: -1 });
+
   res.status(200).json({
     success: true,
-    data: profile
+    data: {
+      ...profile.toObject(),
+      volunteerLogs: logs
+    }
   });
 });
 
@@ -1268,11 +1404,8 @@ const adminApproveVolunteer = asyncHandler(async (req, res, next) => {
   // Update User model
   await User.findByIdAndUpdate(profile.userId, { isApproved });
 
-  // Update Profile background check status if approving
-  if (isApproved) {
-    profile.backgroundCheckStatus = 'Verified';
-    await profile.save();
-  } else {
+  // Update Profile background check status if disapproving
+  if (!isApproved) {
     profile.backgroundCheckStatus = 'Pending';
     await profile.save();
   }
@@ -1476,20 +1609,148 @@ const adminUploadAgreement = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Please upload a file', 400));
   }
 
+  console.log('DEBUG: Received file upload request');
+  console.log('DEBUG: req.file details:', JSON.stringify(req.file, null, 2));
+
+  // Fix Cloudinary PDF URL: PDFs need /raw/upload/ instead of /image/upload/
+  let fileUrl = req.file.path;
+  if (fileUrl && fileUrl.includes('/image/upload/') && (fileUrl.endsWith('.pdf') || req.file.mimetype === 'application/pdf')) {
+    fileUrl = fileUrl.replace('/image/upload/', '/raw/upload/');
+    console.log('DEBUG: Transformed PDF URL to raw:', fileUrl);
+  }
+
   let settings = await SystemSettings.findOne();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
   if (!settings) {
     settings = await SystemSettings.create({
-      agreementUrl: req.file.path,
+      agreementUrl: fileUrl,
+      activeAgreementVersion: `v1.0.0 (${dateStr})`,
     });
   } else {
-    settings.agreementUrl = req.file.path;
+    let currentVersion = settings.activeAgreementVersion || 'v1.0.0';
+    let versionNum = currentVersion.split(' ')[0];
+    
+    const versionMatch = versionNum.match(/v(\d+)\.(\d+)\.(\d+)/);
+    if (versionMatch) {
+      let major = parseInt(versionMatch[1]);
+      let minor = parseInt(versionMatch[2]);
+      let patch = parseInt(versionMatch[3]);
+      patch += 1;
+      versionNum = `v${major}.${minor}.${patch}`;
+    } else {
+      versionNum = 'v1.0.1';
+    }
+
+    settings.agreementUrl = fileUrl;
+    settings.activeAgreementVersion = `${versionNum} (${dateStr})`;
     await settings.save();
+  }
+
+  // Record in History
+  console.log('DEBUG: Preparing AgreementHistory payload');
+  const historyData = {
+    version: settings.activeAgreementVersion,
+    url: req.file.path,
+    uploadedBy: req.user?._id || req.user?.id,
+    changeLog: req.body.changeLog || 'New agreement version uploaded'
+  };
+  console.log('DEBUG: historyData:', JSON.stringify(historyData, null, 2));
+
+  try {
+    const historyEntry = await AgreementHistory.create(historyData);
+    console.log('DEBUG: SUCCESS! History entry ID:', historyEntry._id);
+  } catch (err) {
+    console.error('DEBUG: FAILED to create AgreementHistory record:', err.message);
+    console.error('DEBUG: Full error:', err);
   }
 
   res.status(200).json({
     success: true,
     data: settings,
   });
+});
+
+/**
+ * @desc    Get agreement upload history
+ * @route   GET /api/admin/settings/agreement/history
+ * @access  Private (Admin only)
+ */
+const getAgreementHistory = asyncHandler(async (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 5;
+  const skip = (page - 1) * limit;
+
+  console.log('DEBUG: Fetching Agreement History, page:', page);
+  const total = await AgreementHistory.countDocuments();
+  console.log('DEBUG: Total history records in DB:', total);
+  
+  const history = await AgreementHistory.find()
+    .populate('uploadedBy', 'firstName lastName')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  console.log('DEBUG: History records found:', history.length);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: history,
+  });
+});
+
+
+/**
+ * @desc    View/Download agreement PDF (proxied via signed Cloudinary URL)
+ * @route   GET /api/admin/settings/agreement/view
+ * @access  Private (Admin only)
+ */
+const viewAgreementPdf = asyncHandler(async (req, res, next) => {
+  const cloudinary = require('../utils/cloudinary');
+  
+  // If a specific URL is provided via query, use it; otherwise use the current agreement
+  let pdfUrl = req.query.url;
+
+  if (!pdfUrl) {
+    const settings = await SystemSettings.findOne();
+    if (!settings || !settings.agreementUrl) {
+      return next(new ErrorResponse('No agreement found', 404));
+    }
+    pdfUrl = settings.agreementUrl;
+  }
+
+  // Extract public_id from the Cloudinary URL
+  // URL format: https://res.cloudinary.com/{cloud}/image/upload/v{version}/{folder}/{public_id}.pdf
+  const urlParts = pdfUrl.split('/upload/');
+  if (urlParts.length < 2) {
+    return next(new ErrorResponse('Invalid agreement URL format', 400));
+  }
+
+  // Get everything after /upload/v{version}/ — e.g. "v1773397835/our-hive/filename.pdf"
+  let pathAfterUpload = urlParts[1];
+  // Remove version prefix (v1234567890/)
+  pathAfterUpload = pathAfterUpload.replace(/^v\d+\//, '');
+  // Remove .pdf extension to get the public_id
+  const publicId = pathAfterUpload.replace(/\.pdf$/i, '');
+
+  console.log('DEBUG: Generating signed URL for public_id:', publicId);
+
+  // Generate a signed URL that bypasses access restrictions
+  const signedUrl = cloudinary.url(publicId, {
+    resource_type: 'image',
+    type: 'upload',
+    sign_url: true,
+    format: 'pdf',
+  });
+
+  console.log('DEBUG: Signed URL generated:', signedUrl);
+
+  // Redirect the browser to the signed URL
+  res.redirect(signedUrl);
 });
 
 /**
@@ -1510,11 +1771,12 @@ const adminGetProfile = asyncHandler(async (req, res, next) => {
 const adminUpdateProfile = asyncHandler(async (req, res, next) => {
   console.log('DEBUG: adminUpdateProfile body:', JSON.stringify(req.body));
   console.log('DEBUG: adminUpdateProfile file:', req.file);
-  const { firstName, lastName, phone } = req.body;
+  const { firstName, lastName, email, phone } = req.body;
   
   const updateData = {};
   if (firstName) updateData.firstName = firstName;
   if (lastName) updateData.lastName = lastName;
+  if (email) updateData.email = email;
   
   // Only update phone if it's provided and not an empty string
   if (phone !== undefined && phone !== "") {
@@ -1781,15 +2043,46 @@ const adminApproveMonetaryDonation = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Get single monetary donation detail (Admin)
+ * @route   GET /api/admin/donations/monetary/:id
+ * @access  Private (Admin only)
+ */
+const adminGetMonetaryDonation = asyncHandler(async (req, res, next) => {
+  const donation = await MonetaryDonation.findById(req.params.id)
+    .populate('sponsorId', 'firstName lastName email profilePictureUrl phone')
+    .populate('eventId', 'title description date location category');
+
+  if (!donation) {
+    return next(new ErrorResponse('Donation not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: donation
+  });
+});
+
+/**
  * @desc    Get all badges
  * @route   GET /api/admin/badges
  * @access  Private (Admin only)
  */
 const adminListBadges = asyncHandler(async (req, res, next) => {
-  const badges = await Badge.find().sort({ createdAt: -1 });
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await Badge.countDocuments();
+  const badges = await Badge.find()
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   res.status(200).json({
     success: true,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
     count: badges.length,
     data: badges,
   });
@@ -1879,6 +2172,7 @@ const adminDeleteBadge = asyncHandler(async (req, res, next) => {
   });
 });
 
+// Force restart - 15:15
 module.exports = { 
   getAllUsers, 
   getDashboard, 
@@ -1918,6 +2212,7 @@ module.exports = {
   adminDeleteSponsor,
   adminListMonetaryDonations,
   adminApproveMonetaryDonation,
+  adminGetMonetaryDonation,
   adminGetSettings,
   getSocialLinks,
   adminUpdateSettings,
@@ -1925,10 +2220,14 @@ module.exports = {
   adminUpdateProfile,
   adminUpdatePassword,
   adminUploadAgreement,
+  getAgreementHistory,
+  viewAgreementPdf,
   adminDeletePartner,
+  adminUpdateBadge,
+  adminDeleteBadge,
   adminListBadges,
   adminGetBadge,
   adminCreateBadge,
-  adminUpdateBadge,
-  adminDeleteBadge,
+  adminListPartnerPickups,
+  updateUserRole,
 };

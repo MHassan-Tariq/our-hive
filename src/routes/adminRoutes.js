@@ -46,6 +46,8 @@ const {
   adminUpdateProfile,
   adminUpdatePassword,
   adminUploadAgreement,
+  getAgreementHistory,
+  viewAgreementPdf,
   adminDeletePartner,
   adminListBadges,
   adminGetBadge,
@@ -54,9 +56,33 @@ const {
   adminDeleteBadge,
   adminListMonetaryDonations,
   adminApproveMonetaryDonation,
+  adminGetMonetaryDonation,
+  adminListPartnerPickups,
+  updateUserRole,
 } = require('../controllers/adminController');
 
-// All routes here are admin only
+// PUBLIC-ISH route: PDF viewer with inline auth (opens in new tab, no Authorization header)
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+router.get('/settings/agreement/view', async (req, res, next) => {
+  const token = req.query.token || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Not authorized' });
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user || (user.role !== 'admin' && user.role !== 'moderator')) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    req.user = user;
+    viewAgreementPdf(req, res, next);
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Token invalid' });
+  }
+});
+
+// All routes below here are admin only
 router.use(protect);
 router.use(authorize('admin'));
 
@@ -165,6 +191,7 @@ router.get('/dashboard', getDashboard);
  *                     $ref: '#/components/schemas/AuthResponse'
  */
 router.get('/users', getAllUsers);
+router.patch('/users/:id/role', updateUserRole);
 
 /**
  * @swagger
@@ -789,6 +816,7 @@ router.patch('/participants/:id/revoke-detailed', adminRevokeDetailedIntake);
  *                           lastName: { type: string }
  */
 router.get('/in-kind-donations', adminListInKindDonations);
+router.get('/partner-pickups', adminListPartnerPickups);
 
 /**
  * @swagger
@@ -993,6 +1021,9 @@ router.patch('/settings', adminUpdateSettings);
  */
 router.post('/settings/agreement', upload.single('agreement'), adminUploadAgreement);
 
+
+router.get('/settings/agreement/history', getAgreementHistory);
+
 /**
  * @swagger
  * /api/admin/profile:
@@ -1170,6 +1201,17 @@ router.get('/donations/monetary', adminListMonetaryDonations);
  *       - bearerAuth: []
  */
 router.patch('/donations/monetary/:id/approve', adminApproveMonetaryDonation);
+
+/**
+ * @swagger
+ * /api/admin/donations/monetary/{id}:
+ *   get:
+ *     summary: Get single monetary donation detail
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/donations/monetary/:id', adminGetMonetaryDonation);
 
 /**
  * @swagger
