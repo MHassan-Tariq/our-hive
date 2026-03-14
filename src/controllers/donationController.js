@@ -519,6 +519,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
 
   let query = {};
 
+  // Search filter
   if (search) {
     query.$or = [
       { itemName: { $regex: search, $options: "i" } },
@@ -526,6 +527,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     ];
   }
 
+  // Category filter
   if (category) {
     query.itemCategory = category;
   }
@@ -557,6 +559,12 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
+
+    // 🔒 Ensure DB status is lowercase
+    if (donationObj.status) {
+      donationObj.status = donationObj.status.toLowerCase();
+    }
+
     const isClaimedByPartner = partnerClaimedDonations.includes(
       donation._id.toString()
     );
@@ -583,6 +591,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
       return donationObj;
     }
 
+    // Volunteer logic
     if (
       req.user &&
       donation.assignedVolunteerId &&
@@ -604,10 +613,15 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
       donationObj.isClaimed = false;
     }
 
+    // 🔒 Final safeguard: force lowercase status
+    if (donationObj.status) {
+      donationObj.status = donationObj.status.toLowerCase();
+    }
+
     return donationObj;
   });
 
-  // Log statuses
+  // Log returned statuses
   console.log("Returned Donation Statuses:");
   transformedDonations.forEach(d => {
     console.log(`Donation ${d._id} → status: ${d.status}, displayStatus: ${d.displayStatus}`);
@@ -619,7 +633,6 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     data: transformedDonations
   });
 });
-
 const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
   const { donationId } = req.params;
   let { status } = req.body;
@@ -672,6 +685,15 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
       // But we still want to save the recipientId
       await donation.save();
 
+      // OneSignal Notification to Donor
+      await sendNotification(
+        donation.donorId,
+        'Donation Interest',
+        `A partner has shown interest in your donation "${donation.itemName}".`,
+        'update',
+        'info'
+      );
+
       return res.status(200).json({
         success: true,
         message: "Donation claimed successfully in your profile",
@@ -716,49 +738,77 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
 
   const donationData = donation.toObject();
 
+  // 🔒 Ensure DB status is lowercase
+  if (donationData.status) {
+    donationData.status = donationData.status.toLowerCase();
+  }
+
   // Personalized status for partner
   let isClaimedByPartner = false;
+
   if (req.user && req.user.role === 'partner') {
     const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
-    if (partnerProfile && (partnerProfile.claimedDonations || []).some(cid => cid.toString() === id)) {
+
+    if (
+      partnerProfile &&
+      (partnerProfile.claimedDonations || []).some(
+        cid => cid.toString() === id
+      )
+    ) {
       isClaimedByPartner = true;
     }
   }
 
-  // Show personalized display status based on who's viewing
+  // Partner view
   if (req.user && req.user.role === 'partner') {
     if (isClaimedByPartner) {
-        donationData.status = 'Claimed'; 
-        donationData.displayStatus = 'claimed';
-        donationData.claimedByMe = true;
-        donationData.isClaimed = true;
+      donationData.status = 'claimed';
+      donationData.displayStatus = 'claimed';
+      donationData.claimedByMe = true;
+      donationData.isClaimed = true;
     } else {
-        const finalStates = ['pickedup', 'delivered', 'approved'];
-        const currentStatus = (donationData.status || '').toLowerCase();
-        
-        if (!finalStates.includes(currentStatus)) {
-            donationData.status = 'Pending';
-            donationData.displayStatus = 'available';
-            donationData.isClaimed = false;
-        }
-        donationData.claimedByMe = false;
+      const finalStates = ['pickedup', 'delivered', 'approved'];
+      const currentStatus = (donationData.status || '').toLowerCase();
+
+      if (!finalStates.includes(currentStatus)) {
+        donationData.status = 'pending';
+        donationData.displayStatus = 'available';
+        donationData.isClaimed = false;
+      }
+
+      donationData.claimedByMe = false;
     }
-  } else if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
-    // This user claimed it
-    donationData.status = 'Claimed';
+  }
+
+  // Volunteer who claimed it
+  else if (
+    req.user &&
+    donation.assignedVolunteerId &&
+    donation.assignedVolunteerId.toString() === req.user._id.toString()
+  ) {
+    donationData.status = 'claimed';
     donationData.displayStatus = 'claimed';
     donationData.claimedByMe = true;
     donationData.isClaimed = true;
-  } else if (donation.assignedVolunteerId) {
-    // Someone else claimed it
+  }
+
+  // Someone else claimed
+  else if (donation.assignedVolunteerId) {
     donationData.displayStatus = 'unavailable';
     donationData.claimedByMe = false;
     donationData.isClaimed = true;
-  } else {
-    // Available
+  }
+
+  // Available
+  else {
     donationData.displayStatus = 'available';
     donationData.claimedByMe = false;
     donationData.isClaimed = false;
+  }
+
+  // 🔒 Final safeguard
+  if (donationData.status) {
+    donationData.status = donationData.status.toLowerCase();
   }
 
   res.status(200).json({
