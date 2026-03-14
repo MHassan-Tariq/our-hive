@@ -415,28 +415,18 @@ const logHours = async (req, res) => {
       notes,
       hoursLogged: totalHours,
       opportunityId: opportunityId || null,
+      status: 'pending' // Hours are pending approval by admin
     });
 
-    // 2. Update the profile totals
-    let profile = await VolunteerProfile.findOne({ userId: req.user._id });
-    if (!profile) {
-      profile = new VolunteerProfile({ userId: req.user._id });
-    }
-
-    profile.totalHours += totalHours;
-    profile.hoursThisYear += totalHours;
-
-    // Award badges based on total hours
-    const newBadges = await assignBadges(profile);
-
-    await profile.save();
+    // We no longer add the hours immediately to the volunteer's profile
+    // This will be done in the admin controller upon approval
 
     // if we logged hours for an opportunity, record an activity for the organizer
     if (opportunity) {
       await ActivityLog.create({
         userId: opportunity.partnerId,
         type: 'Volunteer Hours Logged',
-        content: `${req.user.firstName} logged ${totalHours} hours for "${opportunity.title}".`,
+        content: `${req.user.firstName} logged ${totalHours} hours for "${opportunity.title}". (Pending Approval)`,
         relatedId: opportunity._id,
         relatedModel: 'Opportunity',
       });
@@ -446,15 +436,18 @@ const logHours = async (req, res) => {
     await sendNotification(
       req.user._id,
       'Hours Recorded',
-      `You've successfully logged ${totalHours} hours for ${opportunity ? `"${opportunity.title}"` : 'your community work'}.`,
+      `You've successfully submitted ${totalHours} hours for ${opportunity ? `"${opportunity.title}"` : 'your community work'}. They are currently pending admin approval.`,
       'update',
-      'checkmark'
+      'info'
     );
 
+    let profile = await VolunteerProfile.findOne({ userId: req.user._id });
+
     const responseData = {
-      totalHours: profile.totalHours,
-      hoursThisYear: profile.hoursThisYear,
+      totalHours: profile ? profile.totalHours : 0,
+      hoursThisYear: profile ? profile.hoursThisYear : 0,
       logged: totalHours,
+      status: 'pending'
     };
     if (opportunity) {
       responseData.opportunity = {

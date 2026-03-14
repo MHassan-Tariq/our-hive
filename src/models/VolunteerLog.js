@@ -36,6 +36,11 @@ const VolunteerLogSchema = new mongoose.Schema(
       ref: 'Opportunity',
       default: null,
     },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending' // Admin must approve hours by default
+    }
   },
   {
     timestamps: true,
