@@ -4,6 +4,7 @@ const Sponsor = require('../models/Sponsor');
 const User = require('../models/User');
 const VolunteerProfile = require('../models/VolunteerProfile');
 const DonorProfile = require('../models/DonorProfile');
+const PartnerProfile = require('../models/PartnerProfile');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendNotification } = require('../utils/notificationService');
@@ -220,23 +221,52 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
 
   console.log(`Found ${donations.length} offered donations for user ${req.user._id}`);
 
+  // Fetch partner profile if user is a partner
+  let partnerClaimedDonations = [];
+  if (req.user && req.user.role === 'partner') {
+    const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
+    if (partnerProfile) {
+      partnerClaimedDonations = partnerProfile.claimedDonations.map(id => id.toString());
+    }
+  }
+
   // Transform response - show ALL donations with personalized status
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
+    const isClaimedByPartner = partnerClaimedDonations.includes(donation._id.toString());
     
-    // If THIS user claimed it
+    // For partners, force personalized status
+    if (req.user && req.user.role === 'partner') {
+        if (isClaimedByPartner) {
+            donationObj.status = 'Claimed';
+            donationObj.displayStatus = 'claimed';
+            donationObj.isClaimed = true;
+            donationObj.claimedByMe = true;
+        } else {
+            const finalStates = ['pickedup', 'delivered', 'approved'];
+            const currentStatus = (donationObj.status || '').toLowerCase();
+            
+            if (!finalStates.includes(currentStatus)) {
+                donationObj.status = 'Pending';
+                donationObj.displayStatus = 'available';
+                donationObj.isClaimed = false;
+            }
+            donationObj.claimedByMe = false;
+        }
+        return donationObj;
+    }
+
+    // Default Volunteer Logic
     if (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
       donationObj.displayStatus = 'claimed';
       donationObj.isClaimed = true;
       donationObj.claimedByMe = true;
     } 
-    // If someone else claimed it
     else if (donation.assignedVolunteerId) {
       donationObj.displayStatus = 'unavailable';
       donationObj.isClaimed = true;
       donationObj.claimedByMe = false;
     } 
-    // Not claimed by anyone
     else {
       donationObj.displayStatus = 'available';
       donationObj.isClaimed = false;
@@ -300,8 +330,20 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
   const partnerId = req.user._id;
   const { status, search } = req.query;
   
-  // Get ALL donations assigned to this partner
-  let query = { recipientId: partnerId };
+  // Fetch partner profile to check for claimed donations
+  let partnerClaimedDonations = [];
+  const partnerProfile = await PartnerProfile.findOne({ userId: partnerId });
+  if (partnerProfile) {
+    partnerClaimedDonations = partnerProfile.claimedDonations || [];
+  }
+
+  // Get ALL donations assigned to this partner OR claimed by them locally
+  let query = { 
+    $or: [
+      { recipientId: partnerId },
+      { _id: { $in: partnerClaimedDonations } }
+    ]
+  };
 
   if (status) {
     // Optional filter if status is specified
@@ -311,6 +353,12 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
       query.status = { $regex: '^in-transit$', $options: 'i' };
     } else if (status === 'delivered') {
       query.status = { $regex: '^delivered$', $options: 'i' };
+    } else if (status === 'claimed') {
+        // If they filter by claimed, we want to show anything they claimed locally
+        // or anything with global status 'Claimed' that reached them
+        query.status = { $regex: '^claimed$', $options: 'i' };
+        // We might want to adjust this to show their locally claimed items too, 
+        // but $or query above handles the fetch. This filter narrows it down.
     } else {
       query.status = status;
     }
@@ -334,17 +382,28 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
   // Transform to show ALL assigned donations with personalized display status
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
+    const isClaimedByPartner = partnerClaimedDonations.some(id => id.toString() === donation._id.toString());
     
-    // Show personalized display status
-    if (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString()) {
-      donationObj.displayStatus = 'claimed';
-      donationObj.claimedByMe = true;
-    } else if (donation.assignedVolunteerId) {
-      donationObj.displayStatus = 'unavailable';
-      donationObj.claimedByMe = false;
+    // For partners, the "status" field is entirely personalized for Claimed state
+    if (isClaimedByPartner) {
+        donationObj.status = 'Claimed'; 
+        donationObj.displayStatus = 'claimed';
+        donationObj.claimedByMe = true;
+    } else if (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString()) {
+        donationObj.status = 'Claimed';
+        donationObj.displayStatus = 'claimed';
+        donationObj.claimedByMe = true;
     } else {
-      donationObj.displayStatus = 'available';
-      donationObj.claimedByMe = false;
+        // If not claimed by me but in this list (meaning assigned globally),
+        // we check if we should still show it as available or something else
+        const finalStates = ['pickedup', 'delivered', 'approved'];
+        const currentStatus = (donationObj.status || '').toLowerCase();
+        
+        if (!finalStates.includes(currentStatus)) {
+            donationObj.status = 'Pending';
+            donationObj.displayStatus = 'available';
+        }
+        donationObj.claimedByMe = false;
     }
     
     return donationObj;
@@ -445,99 +504,139 @@ const updateDonation = asyncHandler(async (req, res, next) => {
  */
 const getAllDonations = asyncHandler(async (req, res, next) => {
   const { search, category, status } = req.query;
-  console.log(search, 'search', status, 'status', category, 'category');
 
-  // First, check how many total donations exist
-  const totalDonations = await InKindDonation.countDocuments({});
-  console.log(`Total donations in database: ${totalDonations}`);
+  // Fetch partner claimed donations
+  let partnerClaimedDonations = [];
+  if (req.user && req.user.role === "partner") {
+    const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
+
+    if (partnerProfile) {
+      partnerClaimedDonations = partnerProfile.claimedDonations.map(id =>
+        id.toString()
+      );
+    }
+  }
 
   let query = {};
 
   if (search) {
     query.$or = [
-      { itemName: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
+      { itemName: { $regex: search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } }
     ];
   }
 
-  // 🏷 Filter by category
   if (category) {
     query.itemCategory = category;
   }
 
-  // ✅ Show ALL donations - let the user see all with personalized status
-  // Don't filter by status in database - show everything!
-  
-  console.log('Finding donations with query:', JSON.stringify(query));
+  // Status filter
+  if (status && req.user && req.user.role === "partner") {
+    const normalizedStatus = status.toLowerCase();
 
-  // Fetch ALL donations that are 'offered' with donor and volunteer details
+    if (normalizedStatus === "claimed") {
+      query._id = { $in: partnerClaimedDonations };
+    } 
+    else if (normalizedStatus === "pending") {
+      query._id = { $nin: partnerClaimedDonations };
+      query.status = { $nin: ["pickedup", "delivered", "approved"] };
+    } 
+    else if (normalizedStatus !== "all") {
+      query.status = normalizedStatus;
+    }
+  } 
+  else if (status && status !== "all") {
+    query.status = status.toLowerCase();
+  }
+
   const donations = await InKindDonation.find(query)
-    .populate('donorId', 'firstName lastName email')
-    .populate('assignedVolunteerId', 'firstName lastName email')
-    .populate('recipientId', 'firstName lastName email')
+    .populate("donorId", "firstName lastName email")
+    .populate("assignedVolunteerId", "firstName lastName email")
+    .populate("recipientId", "firstName lastName email")
     .sort({ createdAt: -1 });
 
-  console.log(`Found ${donations.length} 'offered' donations in database`);
-  
-  // Also check what status values exist
-  const statusCounts = await InKindDonation.aggregate([
-    { $group: { _id: '$status', count: { $sum: 1 } } }
-  ]);
-  console.log('Status distribution:', statusCounts);
-
-  // Transform response - show ALL donations with personalized display status
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
-    
-    // Personalize status based on who's viewing
-    if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
-      // Only THIS user sees 'claimed' status
-      donationObj.displayStatus = 'claimed';
+    const isClaimedByPartner = partnerClaimedDonations.includes(
+      donation._id.toString()
+    );
+
+    if (req.user && req.user.role === "partner") {
+      if (isClaimedByPartner) {
+        donationObj.status = "claimed";
+        donationObj.displayStatus = "claimed";
+        donationObj.claimedByMe = true;
+        donationObj.isClaimed = true;
+      } else {
+        const finalStates = ["pickedup", "delivered", "approved"];
+        const currentStatus = (donationObj.status || "").toLowerCase();
+
+        if (!finalStates.includes(currentStatus)) {
+          donationObj.status = "pending";
+          donationObj.displayStatus = "available";
+          donationObj.isClaimed = false;
+        }
+
+        donationObj.claimedByMe = false;
+      }
+
+      return donationObj;
+    }
+
+    if (
+      req.user &&
+      donation.assignedVolunteerId &&
+      donation.assignedVolunteerId.toString() === req.user._id.toString()
+    ) {
+      donationObj.status = "claimed";
+      donationObj.displayStatus = "claimed";
       donationObj.claimedByMe = true;
       donationObj.isClaimed = true;
-    } else if (donation.assignedVolunteerId) {
-      // Someone else claimed it - show as unavailable
-      donationObj.displayStatus = 'unavailable';
+    } 
+    else if (donation.assignedVolunteerId) {
+      donationObj.displayStatus = "unavailable";
       donationObj.claimedByMe = false;
       donationObj.isClaimed = true;
-    } else {
-      // Available for claiming
-      donationObj.displayStatus = 'available';
+    } 
+    else {
+      donationObj.displayStatus = "available";
       donationObj.claimedByMe = false;
       donationObj.isClaimed = false;
     }
-    
+
     return donationObj;
   });
 
-  console.log(`Returning ${transformedDonations.length} donations with personalized status`);
+  // Log statuses
+  console.log("Returned Donation Statuses:");
+  transformedDonations.forEach(d => {
+    console.log(`Donation ${d._id} → status: ${d.status}, displayStatus: ${d.displayStatus}`);
+  });
 
   res.status(200).json({
     success: true,
     count: transformedDonations.length,
-    data: transformedDonations,
-    debug: {
-      totalInDatabase: totalDonations,
-      statusDistribution: statusCounts
-    }
+    data: transformedDonations
   });
 });
-
 
 const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
   const { donationId } = req.params;
   let { status } = req.body;
   if (status && typeof status === 'string') {
-    status = status.replace(/^["'](.+)["']$/, '$1');
+    status = status.replace(/^["'](.+)["']$/, '$1').trim();
   }
+  
   const allowedStatuses = ["available", "claimed", "pickedup", "delivered", "approved", "all"];
+  const normalizedStatus = status ? status.toLowerCase() : '';
 
-  if (!status || !allowedStatuses.includes(status)) {
+  if (!status || !allowedStatuses.includes(normalizedStatus)) {
     return res.status(400).json({
       success: false,
       message: `Invalid status value: ${status}`,
     });
   }
+  
   const donation = await InKindDonation.findById(donationId);
   if (!donation) {
     return res.status(404).json({
@@ -545,30 +644,43 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
       message: "Donation not found",
     });
   }
+  
   const validTransitions = {
     pending: ["Available", "Claimed"],
-    Available: ["Claimed"],
-    Claimed: ["PickedUp"],
-    Delivered: ["Delivered"],
-    PickedUp: [],
+    available: ["Claimed"],
+    claimed: ["PickedUp"],
+    delivered: ["Delivered"],
+    pickedup: [],
   };
 
-  // if (validTransitions[donation.status] && !validTransitions[donation.status].includes(status)) {
-  //   return res.status(400).json({
-  //     success: false,
-  //     message: `Cannot change status from ${donation.status} to ${status}`,
-  //   });
-  // }
   if (req.file) {
     donation.image = req.file.path;
   }
 
   // Assign donation to the partner who is picking it up or delivering it
-  if (['PickedUp', 'Delivered', 'Claimed'].includes(status) && req.user) {
+  if (['pickedup', 'delivered', 'claimed'].includes(normalizedStatus) && req.user) {
     donation.recipientId = req.user._id;
+
+    // Special handling for Partner Claim - store in user's profile instead of global status
+    if (normalizedStatus === 'claimed' && req.user.role === 'partner') {
+      await PartnerProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $addToSet: { claimedDonations: donationId } },
+        { new: true, upsert: true }
+      );
+      // We don't change the global status here if they want it to be local
+      // But we still want to save the recipientId
+      await donation.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Donation claimed successfully in your profile",
+        data: donation,
+      });
+    }
   }
 
-  donation.status = status;
+  donation.status = status; // Keep original casing for saved status if desired, or normalizedStatus
   await donation.save();
 
   // OneSignal Notification to Donor
@@ -604,9 +716,36 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
 
   const donationData = donation.toObject();
 
+  // Personalized status for partner
+  let isClaimedByPartner = false;
+  if (req.user && req.user.role === 'partner') {
+    const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
+    if (partnerProfile && (partnerProfile.claimedDonations || []).some(cid => cid.toString() === id)) {
+      isClaimedByPartner = true;
+    }
+  }
+
   // Show personalized display status based on who's viewing
-  if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+  if (req.user && req.user.role === 'partner') {
+    if (isClaimedByPartner) {
+        donationData.status = 'Claimed'; 
+        donationData.displayStatus = 'claimed';
+        donationData.claimedByMe = true;
+        donationData.isClaimed = true;
+    } else {
+        const finalStates = ['pickedup', 'delivered', 'approved'];
+        const currentStatus = (donationData.status || '').toLowerCase();
+        
+        if (!finalStates.includes(currentStatus)) {
+            donationData.status = 'Pending';
+            donationData.displayStatus = 'available';
+            donationData.isClaimed = false;
+        }
+        donationData.claimedByMe = false;
+    }
+  } else if (req.user && donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
     // This user claimed it
+    donationData.status = 'Claimed';
     donationData.displayStatus = 'claimed';
     donationData.claimedByMe = true;
     donationData.isClaimed = true;
