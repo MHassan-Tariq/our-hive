@@ -96,6 +96,12 @@ const PartnerProfileSchema = new mongoose.Schema(
       enum: ['Active', 'Pending', 'Expired', 'Suspended', 'Rejected'],
       default: 'Pending',
     },
+    claimedDonations: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'InKindDonation',
+      },
+    ],
   },
   {
     timestamps: true,

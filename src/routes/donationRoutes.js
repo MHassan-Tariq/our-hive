@@ -17,7 +17,7 @@ const {
   submitMonetaryDonation,
   getMyMonetaryDonations
 } = require('../controllers/donationController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, optionalProtect } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -44,7 +44,7 @@ const { protect, authorize } = require('../middleware/auth');
  *       200:
  *         description: List of all donations.
  */
-router.get('/all', getAllDonations);
+router.get('/all', optionalProtect, getAllDonations);
 
 /**
  * @swagger
@@ -73,7 +73,7 @@ router.get('/all', getAllDonations);
  *       404:
  *         description: Donation not found.
  */
-router.get('/:id', getInKindDonationById);
+router.get('/:id', optionalProtect, getInKindDonationById);
 
 
 /**

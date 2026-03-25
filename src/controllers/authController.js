@@ -40,7 +40,8 @@ const sendTokenResponse = async (user, statusCode, res) => {
 };
 
 const register = asyncHandler(async (req, res, next) => {
-  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability, playerId } = req.body;
+  let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability, playerId, deviceId } = req.body;
+  const effectivePlayerId = playerId || deviceId || '';
   console.log('\n========== REGISTRATION START ==========');
   console.log('1. Received entire request body:', req.body);
   console.log('   - phone value:', phone, '| type:', typeof phone);
@@ -88,7 +89,7 @@ const register = asyncHandler(async (req, res, next) => {
     preferences: {
       notificationEnabled: true,
       language: 'English',
-      oneSignalUserId: playerId || ''
+      oneSignalUserId: effectivePlayerId
     }
   });
   console.log('3. User CREATED in database:');
@@ -170,7 +171,8 @@ const register = asyncHandler(async (req, res, next) => {
  */
 const volunteerRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Volunteer Registration Started ---');
-  let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress, playerId } = req.body;
+  let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress, playerId, deviceId } = req.body;
+  const effectivePlayerId = playerId || deviceId || '';
   console.log('Received body:', req.body);
 
   // Handle single "fullName" field from UI if firstName/lastName missing
@@ -309,7 +311,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
     preferences: {
       notificationEnabled: true,
       language: 'English',
-      oneSignalUserId: playerId || ''
+      oneSignalUserId: effectivePlayerId
     }
   });
   console.log('User created:', { id: user._id, email: user.email });
@@ -380,7 +382,8 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
  */
 const participantRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Participant Registration Started ---');
-  let { fullName, email, password, phone, mailingAddress, playerId } = req.body;
+  let { fullName, email, password, phone, mailingAddress, playerId, deviceId } = req.body;
+  const effectivePlayerId = playerId || deviceId || '';
   console.log('Received body:', req.body);
 
   // Validate required fields
@@ -423,7 +426,7 @@ const participantRegister = asyncHandler(async (req, res, next) => {
     preferences: {
       notificationEnabled: true,
       language: 'English',
-      oneSignalUserId: playerId || ''
+      oneSignalUserId: effectivePlayerId
     }
   });
 
@@ -476,8 +479,10 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     orgAddress,
     website,
     intendedRoles,
-    playerId
+    playerId,
+    deviceId
   } = req.body;
+  const effectivePlayerId = playerId || deviceId || '';
 
   
   // Handle name field
@@ -514,12 +519,15 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
   const user = await User.create({
     firstName: firstName || "",
     lastName: lastName || "",
-    oneSignalUserId: playerId || "",
     email,
     password,
     phone,
     role: "partner",
-    isApproved: false
+    isApproved: false,
+    preferences: {
+      notificationEnabled: true,
+      oneSignalUserId: effectivePlayerId
+    }
   });
 
   // Parse intended roles
@@ -591,7 +599,8 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const login = asyncHandler(async (req, res, next) => {
-  const { email, password, playerId } = req.body;
+  const { email, password, playerId, deviceId } = req.body;
+  const effectivePlayerId = playerId || deviceId;
 
   // Validate input
   if (!email || !password) {
@@ -604,7 +613,7 @@ const login = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Invalid credentials', 401));
   }
 
-  console.log("Player ID:", playerId);
+  console.log("Player ID:", effectivePlayerId);
 
   // Check password
   const isMatch = await user.matchPassword(password);
@@ -613,8 +622,8 @@ const login = asyncHandler(async (req, res, next) => {
   }
 
   // Save OneSignal Player ID if provided
-  if (playerId) {
-    user.preferences.oneSignalUserId = playerId;
+  if (effectivePlayerId) {
+    user.preferences.oneSignalUserId = effectivePlayerId;
     await user.save({ validateBeforeSave: false });
   }
 
