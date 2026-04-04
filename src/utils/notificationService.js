@@ -25,8 +25,8 @@ const sendNotification = async (userId, title, message, type = 'system', iconTyp
     const user = await User.findById(userId).select('preferences.oneSignalUserId preferences.notificationEnabled');
     
     if (!user || !user.preferences.notificationEnabled || !user.preferences.oneSignalUserId) {
-      console.log(user || !user.preferences.notificationEnabled || !user.preferences.oneSignalUserId);
-      console.log(`Notification logged to DB for user ${userId}, but push skipped (muted or no ID)`);
+      const reason = !user ? 'User not found' : (!user.preferences.notificationEnabled ? 'Notifications disabled' : 'No Player ID');
+      console.log(`[Notification] Skip push for ${userId} (${reason}). Stored in database.`);
       return;
     }
 

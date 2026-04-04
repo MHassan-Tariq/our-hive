@@ -599,48 +599,65 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 const login = asyncHandler(async (req, res, next) => {
+  console.log("Login function called");
+
   const { email, password, playerId, deviceId } = req.body;
+  console.log("Request body:", req.body);
+
   const effectivePlayerId = playerId || deviceId;
+  console.log("Effective Player ID:", effectivePlayerId);
 
   // Validate input
   if (!email || !password) {
+    console.log("Validation failed: email or password missing");
     return next(new ErrorResponse('Please provide both email and password', 400));
   }
+  console.log("Input validation passed");
 
   // Find user with password
   const user = await User.findOne({ email }).select('+password');
   if (!user) {
+    console.log(`User not found with email: ${email}`);
     return next(new ErrorResponse('Invalid credentials', 401));
   }
-
-  console.log("Player ID:", effectivePlayerId);
+  console.log("User found:", user._id);
 
   // Check password
   const isMatch = await user.matchPassword(password);
+  console.log("Password match result:", isMatch);
   if (!isMatch) {
+    console.log("Invalid password");
     return next(new ErrorResponse('Invalid credentials', 401));
   }
+  console.log("Password validated successfully");
 
   // Save OneSignal Player ID if provided
   if (effectivePlayerId) {
+    console.log("Saving OneSignal Player ID to user preferences:", effectivePlayerId);
     user.preferences.oneSignalUserId = effectivePlayerId;
     await user.save({ validateBeforeSave: false });
+    console.log("OneSignal Player ID saved");
   }
 
   // Check volunteer or partner approval status
   if ((user.role === 'volunteer' || user.role === 'partner') && !user.isApproved) {
-    return res.json({
+    const result = {
       Status: 200,
       Isapproved: false,
       role: user.role,
       success: false,
       message:
         'Your account is pending approval by the admin. Please wait for confirmation before logging in.',
-    });
+    };
+    console.log("Final result (not approved):", result);
+    return res.json(result);
   }
+  console.log("User approval check passed");
 
   // Send token response
+  console.log("Preparing token response");
   await sendTokenResponse(user, 200, res);
+  console.log("Token response sent (login successful)");
 });
 
 /**
