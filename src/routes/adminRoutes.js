@@ -83,9 +83,12 @@ router.get('/settings/agreement/view', async (req, res, next) => {
   }
 });
 
-// All routes below here are admin only
+// All routes below here require authentication
 router.use(protect);
-router.use(authorize('admin'));
+
+// Broad authorization: Admin and Moderator allowed by default
+// Sensitive routes are restricted to 'admin' specifically below
+router.use(authorize('admin', 'moderator'));
 
 /**
  * @swagger
@@ -191,8 +194,8 @@ router.get('/dashboard', getDashboard);
  *                   items:
  *                     $ref: '#/components/schemas/AuthResponse'
  */
-router.get('/users', getAllUsers);
-router.patch('/users/:id/role', updateUserRole);
+router.get('/users', authorize('admin'), getAllUsers);
+router.patch('/users/:id/role', authorize('admin'), updateUserRole);
 
 /**
  * @swagger
@@ -561,7 +564,7 @@ router.patch('/volunteer/approve-hours/:logId', adminApproveVolunteerHours);
  *                       items:
  *                         type: object
  */
-router.get('/finances', getFinances);
+router.get('/finances', authorize('admin'), getFinances);
 
 /**
  * @swagger
@@ -966,11 +969,11 @@ router.patch('/volunteers/:id/approve', adminApproveVolunteer);
  *       404:
  *         description: Profile not found.
  */
-router.get('/sponsors', adminListSponsors);
-router.get('/sponsors/:id', adminGetSponsor);
-router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
-router.patch('/sponsors/:id', adminUpdateSponsorProfile);
-router.delete('/sponsors/:id', adminDeleteSponsor);
+router.get('/sponsors', authorize('admin'), adminListSponsors);
+router.get('/sponsors/:id', authorize('admin'), adminGetSponsor);
+router.patch('/sponsors/:id/deactivate', authorize('admin'), adminDeactivateSponsor);
+router.patch('/sponsors/:id', authorize('admin'), adminUpdateSponsorProfile);
+router.delete('/sponsors/:id', authorize('admin'), adminDeleteSponsor);
 
 /**
  * @swagger
@@ -1029,9 +1032,9 @@ router.delete('/sponsors/:id', adminDeleteSponsor);
  *                     youtube: { type: string, example: "https://youtube.com/@ourhive" }
  *                     tiktok: { type: string, example: "https://tiktok.com/@ourhive" }
  */
-router.get('/settings', adminGetSettings);
-router.get('/settings/social-links', getSocialLinks);
-router.patch('/settings', adminUpdateSettings);
+router.get('/settings', authorize('admin'), adminGetSettings);
+router.get('/settings/social-links', authorize('admin'), getSocialLinks);
+router.patch('/settings', authorize('admin'), adminUpdateSettings);
 
 /**
  * @swagger
@@ -1054,7 +1057,7 @@ router.patch('/settings', adminUpdateSettings);
  *       200:
  *         description: Agreement uploaded
  */
-router.post('/settings/agreement', upload.single('agreement'), adminUploadAgreement);
+router.post('/settings/agreement', authorize('admin'), upload.single('agreement'), adminUploadAgreement);
 
 
 router.get('/settings/agreement/history', getAgreementHistory);
@@ -1169,7 +1172,7 @@ router.patch('/profile/password', adminUpdatePassword);
  *                           lastName: { type: string }
  *                           email: { type: string }
  */
-router.get('/sponsors', adminListSponsors);
+router.get('/sponsors', authorize('admin'), adminListSponsors);
 
 /**
  * @swagger
@@ -1189,7 +1192,7 @@ router.get('/sponsors', adminListSponsors);
  *       200:
  *         description: Full sponsor detail and history
  */
-router.get('/sponsors/:id', adminGetSponsor);
+router.get('/sponsors/:id', authorize('admin'), adminGetSponsor);
 
 /**
  * @swagger
@@ -1209,7 +1212,7 @@ router.get('/sponsors/:id', adminGetSponsor);
  *       200:
  *         description: Sponsor status updated
  */
-router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
+router.patch('/sponsors/:id/deactivate', authorize('admin'), adminDeactivateSponsor);
 
 /**
  * @swagger
@@ -1224,7 +1227,7 @@ router.patch('/sponsors/:id/deactivate', adminDeactivateSponsor);
  *         name: status
  *         schema: { type: string, enum: [pending, completed] }
  */
-router.get('/donations/monetary', adminListMonetaryDonations);
+router.get('/donations/monetary', authorize('admin'), adminListMonetaryDonations);
 
 /**
  * @swagger
@@ -1235,7 +1238,7 @@ router.get('/donations/monetary', adminListMonetaryDonations);
  *     security:
  *       - bearerAuth: []
  */
-router.patch('/donations/monetary/:id/approve', adminApproveMonetaryDonation);
+router.patch('/donations/monetary/:id/approve', authorize('admin'), adminApproveMonetaryDonation);
 
 /**
  * @swagger
@@ -1246,7 +1249,7 @@ router.patch('/donations/monetary/:id/approve', adminApproveMonetaryDonation);
  *     security:
  *       - bearerAuth: []
  */
-router.get('/donations/monetary/:id', adminGetMonetaryDonation);
+router.get('/donations/monetary/:id', authorize('admin'), adminGetMonetaryDonation);
 
 /**
  * @swagger
