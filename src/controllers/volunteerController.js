@@ -9,6 +9,7 @@ const Notification = require('../models/Notification');
 const cloudinary = require('../utils/cloudinary');
 const fs = require('fs');
 const { sendNotification } = require('../utils/notificationService');
+const { assignBadges } = require('../utils/volunteerUtils');
 
 /**
  * @desc    Save / update a volunteer's profile
@@ -293,66 +294,6 @@ const getClaimedOpportunities = async (req, res) => {
  * @route   POST /api/volunteer/log-hours
  * @access  Private (volunteer)
  */
-
-// Helper function to parse timeRequired from string or number
-const parseTimeRequired = (timeRequired) => {
-  if (typeof timeRequired === 'number') {
-    return timeRequired;
-  }
-  if (typeof timeRequired === 'string') {
-    // Extract number from strings like "12 Hour", "25 hours", etc.
-    const match = timeRequired.match(/(\d+)/);
-    return match ? parseInt(match[1], 10) : 0;
-  }
-  return 0;
-};
-
-// Helper function to assign badges based on total hours
-const assignBadges = async (profile) => {
-  const allBadges = await Badge.find().sort({ timeRequired: 1 });
-  let newBadges = [];
-
-  for (const badge of allBadges) {
-    // Parse timeRequired to handle both string and number types
-    const badgeHoursRequired = parseTimeRequired(badge.timeRequired);
-
-    if (profile.totalHours >= badgeHoursRequired) {
-      const hasBadge = profile.badges.some((b) => b.name === badge.title);
-      if (!hasBadge) {
-        profile.badges.push({
-          name: badge.title,
-          level: badge.level,
-          badgeId: `#BDG-${Math.floor(1000 + Math.random() * 9000)}`,
-          hoursRequired: badgeHoursRequired,
-          imageUrl: badge.imageUrl,
-          earnedAt: new Date(),
-        });
-        newBadges.push(badge.title);
-      }
-    }
-  }
-
-  // Update nextBadgeGoal to the next badge's timeRequired
-  const nextBadge = allBadges.find(b => parseTimeRequired(b.timeRequired) > profile.totalHours);
-  if (nextBadge) {
-    profile.nextBadgeGoal = parseTimeRequired(nextBadge.timeRequired);
-  } else {
-    profile.nextBadgeGoal = profile.totalHours + 10; // Default if no more badges
-  }
-
-  // OneSignal Notification for each new badge
-  for (const badgeTitle of newBadges) {
-    await sendNotification(
-      profile.userId,
-      'New Badge Earned!',
-      `Congratulations! You've earned the "${badgeTitle}" badge for your community service.`,
-      'update',
-      'checkmark'
-    );
-  }
-
-  return newBadges;
-};
 
 const logHours = async (req, res) => {
   try {

@@ -14,6 +14,7 @@ const VolunteerLog = require('../models/VolunteerLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendNotification } = require('../utils/notificationService');
+const { assignBadges } = require('../utils/volunteerUtils');
 
 const ROLES = [
   'visitor',
@@ -397,6 +398,10 @@ const adminApproveVolunteerHours = asyncHandler(async (req, res, next) => {
 
     profile.totalHours = (profile.totalHours || 0) + log.hoursLogged;
     profile.hoursThisYear = (profile.hoursThisYear || 0) + log.hoursLogged;
+    
+    // Assign badges based on updated hours
+    await assignBadges(profile);
+    
     await profile.save();
 
     // Notification
