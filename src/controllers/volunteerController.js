@@ -339,6 +339,9 @@ const logHours = async (req, res) => {
       if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
     }
 
+    // Round to 2 decimal places
+    totalHours = Math.round(totalHours * 100) / 100;
+
     if (!totalHours || totalHours <= 0) {
       return res.status(400).json({
         success: false,
@@ -354,7 +357,7 @@ const logHours = async (req, res) => {
       endTime,
       category,
       notes,
-      hoursLogged: totalHours,
+      hoursLogged: totalHours, // Already rounded above
       opportunityId: opportunityId || null,
       status: 'pending' // Hours are pending approval by admin
     });

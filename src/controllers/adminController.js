@@ -399,6 +399,10 @@ const adminApproveVolunteerHours = asyncHandler(async (req, res, next) => {
     profile.totalHours = (profile.totalHours || 0) + log.hoursLogged;
     profile.hoursThisYear = (profile.hoursThisYear || 0) + log.hoursLogged;
     
+    // Round to 2 decimal places
+    profile.totalHours = Math.round(profile.totalHours * 100) / 100;
+    profile.hoursThisYear = Math.round(profile.hoursThisYear * 100) / 100;
+    
     // Assign badges based on updated hours
     await assignBadges(profile);
     

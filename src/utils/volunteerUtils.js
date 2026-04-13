@@ -19,6 +19,9 @@ const assignBadges = async (profile) => {
   const allBadges = await Badge.find().sort({ timeRequired: 1 });
   let newBadges = [];
 
+  // Ensure totalHours is rounded to 2 decimal places
+  profile.totalHours = Math.round(profile.totalHours * 100) / 100;
+
   for (const badge of allBadges) {
     // Parse timeRequired to handle both string and number types
     const badgeHoursRequired = parseTimeRequired(badge.timeRequired);
