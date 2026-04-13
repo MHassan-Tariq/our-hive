@@ -396,10 +396,13 @@ const adminApproveVolunteerHours = asyncHandler(async (req, res, next) => {
       profile = new VolunteerProfile({ userId: log.userId });
     }
 
-    profile.totalHours = (profile.totalHours || 0) + log.hoursLogged;
-    profile.hoursThisYear = (profile.hoursThisYear || 0) + log.hoursLogged;
+    // Round the logged hours to 2 decimal places before adding
+    const roundedHours = Math.round(log.hoursLogged * 100) / 100;
     
-    // Round to 2 decimal places
+    profile.totalHours = (profile.totalHours || 0) + roundedHours;
+    profile.hoursThisYear = (profile.hoursThisYear || 0) + roundedHours;
+    
+    // Round the final totals to 2 decimal places (in case of existing decimals)
     profile.totalHours = Math.round(profile.totalHours * 100) / 100;
     profile.hoursThisYear = Math.round(profile.hoursThisYear * 100) / 100;
     

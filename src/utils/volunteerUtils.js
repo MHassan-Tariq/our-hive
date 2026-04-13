@@ -42,12 +42,13 @@ const assignBadges = async (profile) => {
     }
   }
 
-  // Update nextBadgeGoal to the next badge's timeRequired
+  // Update nextBadgeGoal to the remaining hours needed for next badge
   const nextBadge = allBadges.find(b => parseTimeRequired(b.timeRequired) > profile.totalHours);
   if (nextBadge) {
-    profile.nextBadgeGoal = parseTimeRequired(nextBadge.timeRequired);
+    const nextBadgeHours = parseTimeRequired(nextBadge.timeRequired);
+    profile.nextBadgeGoal = Math.round((nextBadgeHours - profile.totalHours) * 100) / 100;
   } else {
-    profile.nextBadgeGoal = profile.totalHours + 10; // Default if no more badges
+    profile.nextBadgeGoal = 0; // No more badges to earn
   }
 
   // OneSignal Notification for each new badge

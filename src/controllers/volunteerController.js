@@ -762,6 +762,10 @@ const reassignBadges = async (req, res) => {
     const previousBadges = profile.badges.length;
     profile.badges = [];
 
+    // Round existing hours to fix any decimal issues
+    profile.totalHours = Math.round(profile.totalHours * 100) / 100;
+    profile.hoursThisYear = Math.round(profile.hoursThisYear * 100) / 100;
+
     // Reassign badges based on current total hours
     const newBadges = await assignBadges(profile);
     await profile.save();

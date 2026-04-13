@@ -82,7 +82,7 @@ const VolunteerProfileSchema = new mongoose.Schema(
     },
     nextBadgeGoal: {
       type: Number,
-      default: 10, // Default goal for the first badge
+      default: 10, // Remaining hours needed for next badge
     },
     totalHours: {
       type: Number,
