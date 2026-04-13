@@ -339,8 +339,8 @@ const logHours = async (req, res) => {
       if (totalHours < 0) totalHours += 24; // Handle overnight if necessary
     }
 
-    // Round to 2 decimal places
-    totalHours = Math.round(totalHours * 100) / 100;
+    // Round to integers
+    totalHours = Math.round(totalHours);
 
     if (!totalHours || totalHours <= 0) {
       return res.status(400).json({
@@ -388,8 +388,8 @@ const logHours = async (req, res) => {
     let profile = await VolunteerProfile.findOne({ userId: req.user._id });
 
     const responseData = {
-      totalHours: profile ? profile.totalHours : 0,
-      hoursThisYear: profile ? profile.hoursThisYear : 0,
+      totalHours: profile ? Math.round(profile.totalHours) : 0,
+      hoursThisYear: profile ? Math.round(profile.hoursThisYear) : 0,
       logged: totalHours,
       status: 'pending'
     };
@@ -616,6 +616,11 @@ const getProfile = async (req, res) => {
     profileData.governmentIdUrl = profile.governmentIdUrl || '';
     profileData.drivingLicenseUrl = profile.drivingLicenseUrl || '';
 
+    // Round hours to integers
+    profileData.hoursThisYear = Math.round(profileData.hoursThisYear || 0);
+    profileData.totalHours = Math.round(profileData.totalHours || 0);
+    profileData.nextBadgeGoal = Math.round(profileData.nextBadgeGoal || 0);
+
     // ✅ Transform badges to only include title and url
     profileData.badges = (profileData.badges || []).map(badge => ({
       title: badge.name,
@@ -666,11 +671,11 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         fullName: profile.fullName || `${req.user.firstName} ${req.user.lastName}`,
-        hoursThisYear: profile.hoursThisYear || 0,
-        totalHours: profile.totalHours || 0,
+        hoursThisYear: Math.round(profile.hoursThisYear || 0),
+        totalHours: Math.round(profile.totalHours || 0),
         totalDeliveries: profile.totalDeliveries,
         totalImpact: profile.totalImpact,
-        nextBadgeGoal: profile.nextBadgeGoal || 10,
+        nextBadgeGoal: Math.round(profile.nextBadgeGoal || 10),
         badges: profile.badges,
         upcomingShifts: profile.joinedOpportunities || [],
       },

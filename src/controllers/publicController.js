@@ -29,7 +29,7 @@ exports.getStats = async (req, res) => {
       data: {
         totalBees,
         activeHives,
-        volunteerImpact: volunteerImpact[0]?.totalHours || 0,
+        volunteerImpact: Math.round(volunteerImpact[0]?.totalHours || 0),
         financialSupport: financialSupport[0]?.totalRaised || 0
       }
     });

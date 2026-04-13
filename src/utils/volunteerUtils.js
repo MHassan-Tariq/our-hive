@@ -19,8 +19,8 @@ const assignBadges = async (profile) => {
   const allBadges = await Badge.find().sort({ timeRequired: 1 });
   let newBadges = [];
 
-  // Ensure totalHours is rounded to 2 decimal places
-  profile.totalHours = Math.round(profile.totalHours * 100) / 100;
+  // Ensure totalHours is rounded to integers
+  profile.totalHours = Math.round(profile.totalHours);
 
   for (const badge of allBadges) {
     // Parse timeRequired to handle both string and number types
@@ -46,7 +46,7 @@ const assignBadges = async (profile) => {
   const nextBadge = allBadges.find(b => parseTimeRequired(b.timeRequired) > profile.totalHours);
   if (nextBadge) {
     const nextBadgeHours = parseTimeRequired(nextBadge.timeRequired);
-    profile.nextBadgeGoal = Math.round((nextBadgeHours - profile.totalHours) * 100) / 100;
+    profile.nextBadgeGoal = Math.round(nextBadgeHours - profile.totalHours);
   } else {
     profile.nextBadgeGoal = 0; // No more badges to earn
   }

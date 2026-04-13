@@ -337,6 +337,9 @@ const addVolunteerHours = asyncHandler(async (req, res, next) => {
 
   const numericHours = Number(hours);
 
+  // Round to integers
+  const roundedHours = Math.round(numericHours);
+
   const profile = await VolunteerProfile.findById(req.params.id);
 
   if (!profile) {
@@ -346,7 +349,7 @@ const addVolunteerHours = asyncHandler(async (req, res, next) => {
   // Create a volunteer log entry for this addition as pending
   const log = await VolunteerLog.create({
     userId: profile.userId,
-    hoursLogged: numericHours,
+    hoursLogged: roundedHours,
     date: new Date(),
     startTime: '09:00 AM', // Defaults for administrative entries
     endTime: '05:00 PM',
@@ -396,15 +399,15 @@ const adminApproveVolunteerHours = asyncHandler(async (req, res, next) => {
       profile = new VolunteerProfile({ userId: log.userId });
     }
 
-    // Round the logged hours to 2 decimal places before adding
-    const roundedHours = Math.round(log.hoursLogged * 100) / 100;
+    // Round the logged hours to integers before adding
+    const roundedHours = Math.round(log.hoursLogged);
     
     profile.totalHours = (profile.totalHours || 0) + roundedHours;
     profile.hoursThisYear = (profile.hoursThisYear || 0) + roundedHours;
     
-    // Round the final totals to 2 decimal places (in case of existing decimals)
-    profile.totalHours = Math.round(profile.totalHours * 100) / 100;
-    profile.hoursThisYear = Math.round(profile.hoursThisYear * 100) / 100;
+    // Round the final totals to integers
+    profile.totalHours = Math.round(profile.totalHours);
+    profile.hoursThisYear = Math.round(profile.hoursThisYear);
     
     // Assign badges based on updated hours
     await assignBadges(profile);
@@ -952,6 +955,14 @@ const adminListVolunteers = asyncHandler(async (req, res, next) => {
     .skip(skip)
     .limit(limit);
 
+  // Round hours to integers in profiles
+  const roundedProfiles = profiles.map(profile => ({
+    ...profile.toObject(),
+    hoursThisYear: Math.round(profile.hoursThisYear || 0),
+    nextBadgeGoal: Math.round(profile.nextBadgeGoal || 0),
+    totalHours: Math.round(profile.totalHours || 0),
+  }));
+
   res.status(200).json({
     success: true,
     total,
@@ -962,7 +973,7 @@ const adminListVolunteers = asyncHandler(async (req, res, next) => {
       totalPages: Math.ceil(total / limit),
       totalResults: total
     },
-    data: profiles,
+    data: roundedProfiles,
   });
 });
 
@@ -992,11 +1003,24 @@ const adminGetVolunteer = asyncHandler(async (req, res, next) => {
     .populate('opportunityId', 'title')
     .sort({ date: -1, createdAt: -1 });
 
+  // Round hours to integers
+  const roundedProfile = {
+    ...profile.toObject(),
+    hoursThisYear: Math.round(profile.hoursThisYear),
+    nextBadgeGoal: Math.round(profile.nextBadgeGoal),
+    totalHours: Math.round(profile.totalHours),
+  };
+
+  const roundedLogs = logs.map(log => ({
+    ...log.toObject(),
+    hoursLogged: Math.round(log.hoursLogged),
+  }));
+
   res.status(200).json({
     success: true,
     data: {
-      ...profile.toObject(),
-      volunteerLogs: logs
+      ...roundedProfile,
+      volunteerLogs: roundedLogs
     }
   });
 });
