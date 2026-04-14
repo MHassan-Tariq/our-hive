@@ -60,6 +60,8 @@ const {
   adminGetMonetaryDonation,
   adminListPartnerPickups,
   updateUserRole,
+  adminCreateManualDonation,
+  adminDeleteInKindDonation,
 } = require('../controllers/adminController');
 
 // PUBLIC-ISH route: PDF viewer with inline auth (opens in new tab, no Authorization header)
@@ -854,6 +856,8 @@ router.patch('/participants/:id/revoke-detailed', adminRevokeDetailedIntake);
  *                           lastName: { type: string }
  */
 router.get('/in-kind-donations', adminListInKindDonations);
+router.post('/in-kind-donations', adminCreateManualDonation);
+router.delete('/in-kind-donations/:id', adminDeleteInKindDonation);
 router.get('/partner-pickups', adminListPartnerPickups);
 
 /**
