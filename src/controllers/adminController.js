@@ -720,6 +720,7 @@ const adminListInKindDonations = asyncHandler(async (req, res, next) => {
   const total = await InKindDonation.countDocuments(listQuery);
   const donations = await InKindDonation.find(listQuery)
     .populate('donorId', 'firstName lastName')
+    .populate('sponsorId', 'firstName lastName orgName')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
@@ -747,7 +748,18 @@ const adminListInKindDonations = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
-  const { status, rejectionReason, locationName, additionalNotes, storageRoom, storageRack, storageShelf, storageFloor } = req.body;
+  const { 
+    status, 
+    rejectionReason, 
+    locationName, 
+    additionalNotes, 
+    storageRoom, 
+    storageRack, 
+    storageShelf, 
+    storageFloor,
+    sponsorId,
+    finalAmount
+  } = req.body;
 
   if (status && !['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
     return next(new ErrorResponse('Invalid status', 400));
@@ -767,11 +779,19 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     updates['storageDetails.floor'] = storageFloor;
   }
 
+  // Handle Manual Sponsor Payment
+  if (sponsorId) updates.sponsorId = sponsorId;
+  if (finalAmount !== undefined) {
+    updates.finalAmount = finalAmount;
+    // If an amount is recorded, we consider the donation process completed/successful
+    updates.status = 'completed';
+  }
+
   const donation = await InKindDonation.findByIdAndUpdate(
     req.params.id,
     updates,
     { new: true, runValidators: true }
-  );
+  ).populate('sponsorId', 'firstName lastName email');
 
   if (!donation) {
     return next(new ErrorResponse('Donation not found', 404));
@@ -811,41 +831,108 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Create a Manual In-Kind Donation record (Direct Sponsor Payment)
+ * @route   POST /api/admin/in-kind-donations
+ * @access  Private (Admin only)
+ */
+const adminCreateManualDonation = asyncHandler(async (req, res, next) => {
+  const { sponsorId, finalAmount, date } = req.body;
+
+  if (!sponsorId || !finalAmount) {
+    return next(new ErrorResponse('Please provide sponsorId and finalAmount', 400));
+  }
+
+  // Find the sponsor user to set as the donorId
+  const sponsorUser = await User.findById(sponsorId);
+  if (!sponsorUser) {
+    return next(new ErrorResponse('Sponsor user not found', 404));
+  }
+
+  try {
+    const donation = await InKindDonation.create({
+      donorId: sponsorId,
+      sponsorId: sponsorId,
+      finalAmount: Number(finalAmount),
+      itemName: 'Sponsor Contribution',
+      title: 'Manual Contribution',
+      itemCategory: 'Financial',
+      description: 'Manually recorded from accounting records.',
+      pickupAddress: 'Manual Entry (HQ)', // satisfy schema requirement
+      deliveryMethod: 'manual',
+      status: 'completed',
+      createdAt: date || new Date()
+    });
+
+    res.status(201).json({ success: true, data: donation });
+  } catch (error) {
+    console.error('ERROR creating manual donation:', error);
+    return next(new ErrorResponse(`Failed to create donation: ${error.message}`, 500));
+  }
+});
+
+/**
+ * @desc    Delete an In-Kind Donation record
+ * @route   DELETE /api/admin/in-kind-donations/:id
+ * @access  Private (Admin only)
+ */
+const adminDeleteInKindDonation = asyncHandler(async (req, res, next) => {
+  const donation = await InKindDonation.findByIdAndDelete(req.params.id);
+
+  if (!donation) {
+    return next(new ErrorResponse('Donation not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Donation record deleted successfully',
+    data: {},
+  });
+});
+
+/**
  * @desc    Export in-kind donations to CSV
  * @route   GET /api/admin/in-kind-donations/export
  * @access  Private (Admin only)
  */
 const adminExportInKindDonationsCSV = asyncHandler(async (req, res, next) => {
-  const donations = await InKindDonation.find().populate('donorId', 'firstName lastName');
+  // Only export completed records to match the Ledger UI
+  const donations = await InKindDonation.find({ status: 'completed' })
+    .populate('donorId', 'firstName lastName')
+    .populate('sponsorId', 'firstName lastName email orgName');
 
   const headers = [
-    'Ref ID', 'Donor Name', 'Item Name', 'Category', 'Quantity', 
-    'Delivery Method', 'Destination', 'Storage Room', 'Status', 'Date Submitted'
+    'Date Recorded', 'Transaction ID', 'Sponsor/Donor', 'Sponsor Email', 'Category', 'Amount Received', 'Status'
   ];
 
   const rows = [headers.join(',')];
 
   donations.forEach(d => {
-    const donorName = d.donorId ? `${d.donorId.firstName} ${d.donorId.lastName}` : 'Unknown';
-    const dest = d.locationName || '';
-    const storage = d.storageDetails?.room ? `${d.storageDetails.room} ${d.storageDetails.rack || ''} ${d.storageDetails.shelf || ''}`.trim() : '';
+    // Resolve sponsor name and email
+    let sponsorName = 'Unknown';
+    let sponsorEmail = 'N/A';
+    
+    if (d.sponsorId) {
+       sponsorName = d.sponsorId.orgName || `${d.sponsorId.firstName} ${d.sponsorId.lastName}`.trim();
+       sponsorEmail = d.sponsorId.email || 'N/A';
+    } else if (d.donorId) {
+       sponsorName = `${d.donorId.firstName} ${d.donorId.lastName}`.trim();
+       sponsorEmail = d.donorId.email || 'N/A';
+    }
+
     const row = [
+      d.createdAt.toISOString().split('T')[0],
       d.refId,
-      donorName,
-      d.itemName,
-      d.itemCategory,
-      d.quantity || '',
-      d.deliveryMethod || '',
-      dest,
-      storage,
-      d.status,
-      d.createdAt.toISOString().split('T')[0]
+      sponsorName,
+      sponsorEmail,
+      d.itemCategory || 'Financial',
+      d.finalAmount || 0,
+      (d.status || 'completed').toUpperCase()
     ].map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(',');
     rows.push(row);
   });
 
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="in_kind_donations.csv"');
+  res.setHeader('Content-Disposition', 'attachment; filename="contributions_ledger.csv"');
   res.status(200).send(rows.join('\n'));
 });
 
@@ -856,7 +943,8 @@ const adminExportInKindDonationsCSV = asyncHandler(async (req, res, next) => {
  */
 const adminGetInKindDonation = asyncHandler(async (req, res, next) => {
   const donation = await InKindDonation.findById(req.params.id)
-    .populate('donorId', 'firstName lastName email phone profilePictureUrl');
+    .populate('donorId', 'firstName lastName email phone profilePictureUrl')
+    .populate('sponsorId', 'firstName lastName email');
   res.status(200).json({ success: true, data: donation });
 });
 
@@ -1921,72 +2009,152 @@ const adminUpdatePassword = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminListSponsors = asyncHandler(async (req, res, next) => {
+  console.log("==== START adminListSponsors ====");
+
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
   const { search, status } = req.query;
 
-  // 1. Build Query
+  console.log("Query Params:", { page, limit, skip, search, status });
+
+  // 1. Build User Query
   const userQuery = { role: 'sponsor' };
   if (search) {
     const regex = { $regex: search, $options: 'i' };
-    userQuery.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
-  }
-  const matchingUsers = await User.find(userQuery).select('_id');
-  const userIds = matchingUsers.map(u => u._id);
-
-  const sponsorQuery = { userId: { $in: userIds } };
-  if (status) sponsorQuery.status = status;
-  if (search) {
-    const regex = { $regex: search, $options: 'i' };
-    sponsorQuery.$or = [
-      ...(sponsorQuery.$or || []),
-      { organizationName: regex }
+    userQuery.$or = [
+      { firstName: regex },
+      { lastName: regex },
+      { email: regex }
     ];
   }
 
-  // 2. Fetch Data
-  const total = await Sponsor.countDocuments(sponsorQuery);
-  const sponsors = await Sponsor.find(sponsorQuery)
-    .populate('userId', 'firstName lastName email phone profilePictureUrl createdAt')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  console.log("User Query:", userQuery);
 
-  // 3. Calculate Stats
-  // Annual Contributions (Last 365 days)
+  // 2. Fetch Users
+  const users = await User.find(userQuery).select(
+    '_id firstName lastName email phone profilePictureUrl createdAt'
+  );
+
+  console.log("Fetched Users Count:", users.length);
+
+  const userIds = users.map(u => u._id);
+  console.log("User IDs:", userIds);
+
+  // 3. Build Sponsor Query
+  const sponsorQuery = { userId: { $in: userIds } };
+
+  if (status) sponsorQuery.status = status;
+
+  if (search) {
+    const regex = { $regex: search, $options: 'i' };
+    sponsorQuery.$or = [{ organizationName: regex }];
+  }
+
+  console.log("Sponsor Query:", sponsorQuery);
+
+  let finalSponsors = [];
+  let total = 0;
+
+  if (search || status) {
+    console.log("Mode: FILTERED (search/status)");
+
+    const sponsorProfiles = await Sponsor.find(sponsorQuery).populate('userId');
+
+    console.log("Sponsor Profiles Count:", sponsorProfiles.length);
+
+    finalSponsors = sponsorProfiles;
+
+    total = await Sponsor.countDocuments(sponsorQuery);
+    console.log("Total (Filtered):", total);
+
+  } else {
+    console.log("Mode: DEFAULT (all sponsors)");
+
+    const sponsorProfiles = await Sponsor.find({ userId: { $in: userIds } });
+
+    console.log("Sponsor Profiles Count:", sponsorProfiles.length);
+
+    const profileMap = sponsorProfiles.reduce((acc, s) => {
+      acc[s.userId.toString()] = s;
+      return acc;
+    }, {});
+
+    finalSponsors = users.map(u => {
+      const profile = profileMap[u._id.toString()] || {};
+
+      return {
+        ...profile._doc,
+        _id: profile._id || `temp_${u._id}`,
+        userId: u,
+        organizationName:
+          profile.organizationName ||
+          `${u.firstName} ${u.lastName}`.trim() ||
+          'Anonymous Sponsor',
+        status: profile.status || 'Active'
+      };
+    });
+
+    total = users.length;
+    console.log("Total (Default):", total);
+  }
+
+  console.log("Final Sponsors Before Pagination:", finalSponsors.length);
+
+  // Pagination
+  const paginatedSponsors = finalSponsors.slice(skip, skip + limit);
+  console.log("Paginated Sponsors Count:", paginatedSponsors.length);
+
+  // Stats Calculation
+  console.log("Calculating Stats...");
+
+  // Annual Contributions
   const oneYearAgo = new Date();
   oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+
   const annualAggregation = await MonetaryDonation.aggregate([
     { $match: { createdAt: { $gte: oneYearAgo }, status: 'completed' } },
     { $group: { _id: null, total: { $sum: '$amount' } } }
   ]);
+
   const annualContributions = annualAggregation[0]?.total || 0;
+  console.log("Annual Contributions:", annualContributions);
 
   // In-Kind Valuation
   const inKindAggregation = await InKindDonation.aggregate([
-    { $group: { _id: null, total: { $sum: { $toDouble: { $ifNull: [ "$estimatedValue", "0" ] } } } } }
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: {
+            $toDouble: { $ifNull: ["$estimatedValue", "0"] }
+          }
+        }
+      }
+    }
   ]);
-  // Note: $toDouble might fail if estimatedValue has non-numeric characters like '$'. 
-  // For a robust implementation, we'd need cleaner data or a better aggregation.
-  // Assuming seeder will provide numeric-friendly strings or numbers.
-  const inKindValuation = inKindAggregation[0]?.total || 0;
 
-  // Total Active Partners
+  const inKindValuation = inKindAggregation[0]?.total || 0;
+  console.log("In-Kind Valuation:", inKindValuation);
+
+  // Active Partners
   const totalActivePartners = await Sponsor.countDocuments({ status: 'Active' });
+  console.log("Total Active Partners:", totalActivePartners);
+
+  console.log("==== END adminListSponsors ====");
 
   res.status(200).json({
     success: true,
     total,
     page,
     pages: Math.ceil(total / limit),
-    count: sponsors.length,
+    count: paginatedSponsors.length, // FIXED (was sponsors.length ❌)
     stats: {
       annualContributions,
       inKindValuation,
       totalActivePartners
     },
-    data: sponsors
+    data: paginatedSponsors
   });
 });
 
@@ -2328,4 +2496,6 @@ module.exports = {
   adminCreateBadge,
   adminListPartnerPickups,
   updateUserRole,
+  adminCreateManualDonation,
+  adminDeleteInKindDonation,
 };

@@ -106,6 +106,15 @@ const InKindDonationSchema = new mongoose.Schema(
     deliveredDate: {
       type: Date,
     },
+    sponsorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    finalAmount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
