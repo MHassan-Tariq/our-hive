@@ -698,9 +698,10 @@ const checkAvailability = asyncHandler(async (req, res, next) => {
 });
 
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 /**
- * @desc    Initiate password reset — generates a token and logs reset link
+ * @desc    Initiate password reset — generates a code and sends it via email
  * @route   POST /api/auth/forgot-password
  * @access  Public
  */
@@ -715,72 +716,105 @@ const forgotPassword = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('No account found with that email address', 404));
   }
 
-  // Generate reset token using the User model method
-  const resetToken = user.getResetPasswordToken();
+  // Generate reset code using the User model method
+  const resetCode = user.getResetPasswordCode();
+  console.log(resetCode);
   await user.save({ validateBeforeSave: false });
 
-  // Construct reset URL (frontend should handle this route)
-  const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
+  // Create nodemailer transporter for custom SMTP
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
 
-  // Construct email message
-  const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
-  const html = `<p>You are receiving this email because you (or someone else) has requested the reset of a password. Please click the link below to reset your password:</p><a href="${resetUrl}" clicktracking=off>${resetUrl}</a>`;
+  const mailOptions = {
+    from: `"${process.env.FROM_NAME}" <${process.env.SMTP_USER}>`,
+    to: user.email,
+    subject: "Password Reset Code",
+    html: `<p>Your password reset code is: <strong>${resetCode}</strong></p><p>This code will expire in 10 minutes.</p>`,
+  };
 
   try {
-    const sendEmail = require('../utils/sendEmail');
-    await sendEmail({
-      email: user.email,
-      subject: 'Password Reset Token',
-      message,
-      html
-    });
-
+    await transporter.sendMail(mailOptions);
     res.status(200).json({
       success: true,
-      data: 'Email sent'
+      data: 'Reset code sent to email'
     });
   } catch (err) {
-    console.error(err);
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
+    console.error('Email send error:', err);
+    user.resetCode = undefined;
+    user.resetCodeExpire = undefined;
     await user.save({ validateBeforeSave: false });
     return next(new ErrorResponse('Email could not be sent', 500));
   }
 });
 
 /**
- * @desc    Reset password using the token from the email link
- * @route   PUT /api/auth/reset-password/:resetToken
+ * @desc    Verify OTP code
+ * @route   POST /api/auth/verify-otp
  * @access  Public
  */
-const resetPassword = asyncHandler(async (req, res, next) => {
-  const { password } = req.body;
-  if (!password || password.length < 6) {
-    return next(new ErrorResponse('Password must be at least 6 characters', 400));
+const verifyOtp = asyncHandler(async (req, res, next) => {
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return next(new ErrorResponse('Please provide email and code', 400));
   }
 
-  // Hash the incoming token to compare against the stored hash
-  const resetPasswordToken = crypto
-    .createHash('sha256')
-    .update(req.params.resetToken)
-    .digest('hex');
-
   const user = await User.findOne({
-    resetPasswordToken,
-    resetPasswordExpire: { $gt: Date.now() }
+    email: email.toLowerCase(),
+    resetCode: code,
+    resetCodeExpire: { $gt: Date.now() }
   });
 
   if (!user) {
-    return next(new ErrorResponse('Invalid or expired reset token', 400));
+    return res.status(200).json({
+      success: false,
+      message: 'Invalid or expired reset code'
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'OTP verified successfully'
+  });
+});
+
+/**
+ * @desc    Reset password (OTP must be verified first)
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+const resetPassword = asyncHandler(async (req, res, next) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return next(new ErrorResponse('Please provide email and new password', 400));
+  }
+  if (password.length < 6) {
+    return next(new ErrorResponse('Password must be at least 6 characters', 400));
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  // Check if OTP was verified (resetCode should still be valid)
+  if (!user.resetCode || !user.resetCodeExpire || user.resetCodeExpire < Date.now()) {
+    return next(new ErrorResponse('OTP not verified or expired. Please verify OTP first.', 400));
   }
 
   // Set the new password and clear the reset fields
   user.password = password;
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpire = undefined;
+  user.resetCode = undefined;
+  user.resetCodeExpire = undefined;
   await user.save();
 
   await sendTokenResponse(user, 200, res);
 });
 
-module.exports = { register, volunteerRegister, participantRegister, partnerRegister, login, logout, checkAvailability, forgotPassword, resetPassword };
+module.exports = { register, volunteerRegister, participantRegister, partnerRegister, login, logout, checkAvailability, forgotPassword, verifyOtp, resetPassword };

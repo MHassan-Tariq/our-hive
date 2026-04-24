@@ -94,6 +94,8 @@ const UserSchema = new mongoose.Schema(
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    resetCode: String,
+    resetCodeExpire: Date,
   },
   {
     timestamps: true,
@@ -125,6 +127,18 @@ UserSchema.methods.getResetPasswordToken = function () {
   this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
   // Return the unhashed token (sent in email)
   return resetToken;
+};
+
+// Method to generate and store password reset code
+UserSchema.methods.getResetPasswordCode = function () {
+  // Generate 6-digit numeric code
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Store the code
+  this.resetCode = resetCode;
+  // Set 10-minute expiry
+  this.resetCodeExpire = Date.now() + 10 * 60 * 1000;
+  // Return the code (sent in email)
+  return resetCode;
 };
 
 // Method to generate signed JWT token
