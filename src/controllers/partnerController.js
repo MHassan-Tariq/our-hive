@@ -358,7 +358,7 @@ const getDashboardData = async (req, res) => {
       const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
                             (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
-      donationObj.status = dbStatus; // Keep raw lowercase for logic
+      donationObj.status = capitalize(dbStatus); // Keep Capitalized for logic
       donationObj.displayStatus = displayLabel;
       donationObj.statusLabel = displayLabel;
       donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
