@@ -758,8 +758,7 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     storageShelf, 
     storageFloor,
     sponsorId,
-    finalAmount,
-    recipientId
+    finalAmount
   } = req.body;
 
   if (status && !['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
@@ -788,17 +787,11 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     updates.status = 'completed';
   }
 
-  if (recipientId) {
-    updates.recipientId = recipientId;
-    if (!updates.status) updates.status = 'scheduled';
-  }
-
   const donation = await InKindDonation.findByIdAndUpdate(
     req.params.id,
     updates,
     { new: true, runValidators: true }
-  ).populate('sponsorId', 'firstName lastName email')
-   .populate('recipientId', 'firstName lastName email role');
+  ).populate('sponsorId', 'firstName lastName email');
 
   if (!donation) {
     return next(new ErrorResponse('Donation not found', 404));
@@ -964,7 +957,7 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
-  const { search, status } = req.query;
+  const { search } = req.query;
 
   const partnerUsers = await User.find({ role: 'partner' }).select('_id');
   const partnerUserIds = partnerUsers.map(u => u._id);
