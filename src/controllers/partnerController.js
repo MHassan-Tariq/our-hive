@@ -391,7 +391,7 @@ const getDashboardData = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error('getDashboardData error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

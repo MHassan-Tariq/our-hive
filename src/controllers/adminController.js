@@ -27,6 +27,26 @@ const ROLES = [
   'admin',
 ];
 
+// Shared Color Palette for Statuses
+const statusColors = {
+  approved: '#22c55e', // Green
+  scheduled: '#3b82f6', // Blue
+  completed: '#6b7280', // Grey
+  pickedup: '#6b7280', // Grey
+  delivered: '#6b7280', // Grey
+  rejected: '#ef4444', // Red
+  pending: '#f97316', // Orange
+  offered: '#eab308', // Yellow/Gold
+  claimed: '#eab308'  // Yellow/Gold
+};
+
+// Shared Capitalization Utility
+const capitalize = (s) => {
+  if (!s) return '';
+  if (s.toLowerCase() === 'pickedup') return 'Picked Up';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
 /**
  * @desc    Get all users
  * @route   GET /api/admin/users
@@ -1033,7 +1053,7 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
 
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
-    const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
+    const displayLabel = capitalize(dbStatus);
 
     donationObj.status = displayLabel; // Force Capitalized
     donationObj.displayStatus = displayLabel;
