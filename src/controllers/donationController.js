@@ -783,44 +783,26 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
   // 4. Personalized Status Logic
-  if (userRole === 'partner') {
-    const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString());
-    
-    if (isFinalized) {
-      donationData.status = displayLabel; // Force Capitalized "Approved"
-      donationData.displayStatus = displayLabel;
-    } else if (isClaimedByMe) {
-      donationData.status = 'Claimed';
-      donationData.displayStatus = 'Claimed';
-    } else {
-      donationData.status = dbStatus === 'offered' ? 'Available' : 'Pending';
-      donationData.displayStatus = 'Available';
-    }
-    
-    donationData.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-    donationData.claimedByMe = isClaimedByMe;
-    donationData.statusLabel = donationData.displayStatus;
-  }
-  else {
-    // Default Volunteer Logic
-    const isClaimedByMe = donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === (req.user && req.user._id.toString());
-    
-    if (isFinalized) {
-      donationData.status = dbStatus;
-      donationData.displayStatus = displayLabel;
-    } else if (isClaimedByMe) {
-      donationData.status = 'claimed';
-      donationData.displayStatus = 'Claimed';
-    } else if (donation.assignedVolunteerId) {
-      donationData.displayStatus = 'Unavailable';
-    } else {
-      donationData.displayStatus = 'Available';
-    }
-    
-    donationData.isClaimed = !!donation.assignedVolunteerId;
-    donationData.claimedByMe = isClaimedByMe;
-    donationData.statusLabel = donationData.displayStatus;
-  }
+  const statusColors = {
+    approved: '#22c55e', // Green
+    scheduled: '#3b82f6', // Blue
+    completed: '#6b7280', // Grey
+    pickedup: '#6b7280', // Grey
+    delivered: '#6b7280', // Grey
+    rejected: '#ef4444', // Red
+    pending: '#f97316', // Orange
+    offered: '#eab308', // Yellow/Gold
+    claimed: '#eab308'  // Yellow/Gold
+  };
+
+  const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
+  
+  donationData.statusColor = statusColors[dbStatus] || '#A16D36';
+  donationData.status = dbStatus; // Keep raw for app logic (e.g. button text)
+  donationData.displayStatus = displayLabel;
+  donationData.statusLabel = displayLabel;
+  donationData.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
+  donationData.claimedByMe = isClaimedByMe;
 
   res.status(200).json({
     success: true,
