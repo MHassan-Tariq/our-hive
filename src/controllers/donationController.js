@@ -201,7 +201,7 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
     // 4. Transform response
-    donationObj.status = dbStatus;
+    donationObj.status = dbStatus; // Keep raw for app logic
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
@@ -278,39 +278,22 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     
     if (userRole === 'partner') {
-        if (isFinalized) {
-            donationObj.status = displayLabel; // Force Capitalized "Approved"
-            donationObj.displayStatus = displayLabel;
-        } else if (isClaimedByMe) {
-            donationObj.status = 'Claimed';
-            donationObj.displayStatus = 'Claimed';
-        } else {
-            donationObj.status = dbStatus === 'offered' ? 'Available' : 'Pending';
-            donationObj.displayStatus = 'Available';
-        }
+        donationObj.status = dbStatus; // Keep raw lowercase for app logic
+        donationObj.displayStatus = displayLabel;
         
         donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
         donationObj.claimedByMe = isClaimedByMe;
-        donationObj.statusLabel = donationObj.displayStatus;
+        donationObj.statusLabel = displayLabel;
         return donationObj;
     }
 
     // Default Volunteer Logic
-    if (isFinalized) {
-        donationObj.status = dbStatus;
-        donationObj.displayStatus = displayLabel;
-    } else if (isClaimedByMe) {
-        donationObj.status = 'claimed';
-        donationObj.displayStatus = 'Claimed';
-    } else if (donation.assignedVolunteerId) {
-        donationObj.displayStatus = 'Unavailable';
-    } else {
-        donationObj.displayStatus = 'Available';
-    }
+    donationObj.status = dbStatus; // Keep raw lowercase for app logic
+    donationObj.displayStatus = displayLabel;
     
     donationObj.isClaimed = !!donation.assignedVolunteerId;
     donationObj.claimedByMe = isClaimedByMe;
-    donationObj.statusLabel = donationObj.displayStatus;
+    donationObj.statusLabel = displayLabel;
     return donationObj;
   });
 
@@ -464,19 +447,9 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    if (isFinalized) {
-        donationObj.status = displayLabel; // Force Capitalized "Approved"
-        donationObj.displayStatus = displayLabel;
-        donationObj.statusLabel = displayLabel;
-    } else if (isClaimedByMe) {
-        donationObj.status = 'Claimed'; 
-        donationObj.displayStatus = 'Claimed';
-        donationObj.statusLabel = 'Claimed';
-    } else {
-        donationObj.status = dbStatus === 'offered' ? 'Available' : 'Pending';
-        donationObj.displayStatus = 'Available';
-        donationObj.statusLabel = 'Available';
-    }
+    donationObj.status = dbStatus; // Keep raw lowercase for logic
+    donationObj.displayStatus = displayLabel;
+    donationObj.statusLabel = displayLabel;
     
     donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
     donationObj.claimedByMe = isClaimedByMe;
@@ -664,40 +637,12 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    if (userRole === 'partner') {
-        if (isFinalized) {
-            donationObj.status = displayLabel; // Force Capitalized "Approved"
-            donationObj.displayStatus = displayLabel;
-        } else if (isClaimedByMe) {
-            donationObj.status = 'Claimed';
-            donationObj.displayStatus = 'Claimed';
-        } else {
-            donationObj.status = dbStatus === 'offered' ? 'Available' : 'Pending';
-            donationObj.displayStatus = 'Available';
-        }
-        
-        donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-        donationObj.claimedByMe = isClaimedByMe;
-        donationObj.statusLabel = donationObj.displayStatus;
-        return donationObj;
-    }
-
-    // Default Volunteer/Public Logic
-    if (isFinalized) {
-        donationObj.status = dbStatus;
-        donationObj.displayStatus = displayLabel;
-    } else if (isClaimedByMe) {
-        donationObj.status = 'claimed';
-        donationObj.displayStatus = 'Claimed';
-    } else if (donation.assignedVolunteerId) {
-        donationObj.displayStatus = 'Unavailable';
-    } else {
-        donationObj.displayStatus = 'Available';
-    }
+    donationObj.status = dbStatus; // Keep raw for logic
+    donationObj.displayStatus = displayLabel;
+    donationObj.statusLabel = displayLabel;
     
     donationObj.isClaimed = !!donation.assignedVolunteerId;
     donationObj.claimedByMe = isClaimedByMe;
-    donationObj.statusLabel = donationObj.displayStatus;
     return donationObj;
   });
 
