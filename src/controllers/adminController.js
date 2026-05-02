@@ -37,7 +37,8 @@ const statusColors = {
   rejected: '#ef4444', // Red
   pending: '#f97316', // Orange
   offered: '#eab308', // Yellow/Gold
-  claimed: '#eab308'  // Yellow/Gold
+  claimed: '#eab308',  // Yellow/Gold
+  'picked up': '#6b7280' // Grey
 };
 
 // Shared Capitalization Utility
@@ -846,13 +847,17 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     iconType = 'checkmark';
   }
 
-  await sendNotification(
-    donation.donorId,
-    title,
-    `Your donation of "${donation.itemName}" is now ${status}.`,
-    'update',
-    iconType
-  );
+  try {
+    await sendNotification(
+      donation.donorId,
+      title,
+      `Your in-kind donation of "${donation.itemName}" is now ${status}.`,
+      'update',
+      iconType
+    );
+  } catch (err) {
+    console.error('Notification Error:', err.message);
+  }
 
   res.status(200).json({ success: true, data: donation });
 });

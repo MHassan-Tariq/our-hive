@@ -19,7 +19,8 @@ const statusColors = {
   rejected: '#ef4444', // Red
   pending: '#f97316', // Orange
   offered: '#eab308', // Yellow/Gold
-  claimed: '#eab308'  // Yellow/Gold
+  claimed: '#eab308',  // Yellow/Gold
+  'picked up': '#6b7280' // Grey
 };
 
 // Shared Capitalization Utility
@@ -67,13 +68,17 @@ const offerItem = asyncHandler(async (req, res, next) => {
     status: 'pending',
   });
 
-  await sendNotification(
-    req.user._id,
-    'Donation Offer Received',
-    `Thank you! Your donation offer for "${title}" has been received and is pending review.`,
-    'update',
-    'checkmark'
-  );
+  try {
+    await sendNotification(
+      req.user._id,
+      'Donation Offer Received',
+      `Thank you! Your donation offer for "${title}" has been received and is pending review.`,
+      'update',
+      'checkmark'
+    );
+  } catch (err) {
+    console.error('Notification Error:', err.message);
+  }
 
   res.status(201).json({
     success: true,
@@ -111,7 +116,7 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     donationObj.isClaimed = !!donation.assignedVolunteerId;
     donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
     donationObj.isRejected = dbStatus === 'rejected';
-    donationObj.claimedByMe = (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString()) || false;
+    donationObj.claimedByMe = !!(donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
     return donationObj;
   });
@@ -149,8 +154,8 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-    donationObj.claimedByMe = isClaimedByMe;
+    donationObj.isClaimed = !!(isClaimedByMe || donation.assignedVolunteerId);
+    donationObj.claimedByMe = !!isClaimedByMe;
     donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
     donationObj.isRejected = dbStatus === 'rejected';
 
@@ -226,12 +231,18 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const donationObj = donation.toObject();
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
     const displayLabel = capitalize(dbStatus);
-    
+    const isClaimedByMe = !!(partnerClaimedDonations.includes(donation._id.toString()) || 
+                          (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString()));
+
     donationObj.status = displayLabel;
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    
+    donationObj.isClaimed = !!(isClaimedByMe || donation.assignedVolunteerId);
+    donationObj.claimedByMe = isClaimedByMe;
+    donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
+    donationObj.isRejected = dbStatus === 'rejected';
+
     return donationObj;
   });
 
@@ -329,8 +340,8 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-    donationObj.claimedByMe = isClaimedByMe;
+    donationObj.isClaimed = !!(isClaimedByMe || donation.assignedVolunteerId);
+    donationObj.claimedByMe = !!isClaimedByMe;
     donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
     donationObj.isRejected = dbStatus === 'rejected';
 
@@ -369,13 +380,17 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
   if (req.file) donation.image = req.file.path;
   await donation.save();
 
-  await sendNotification(
-    donation.donorId,
-    'Donation Update',
-    `The status of your donation "${donation.itemName}" has been updated to ${capitalize(status)}.`,
-    'update',
-    'info'
-  );
+  try {
+    await sendNotification(
+      donation.donorId,
+      'Donation Update',
+      `The status of your donation "${donation.itemName}" has been updated to ${capitalize(status)}.`,
+      'update',
+      'info'
+    );
+  } catch (err) {
+    console.error('Notification Error:', err.message);
+  }
 
   res.status(200).json({ success: true, message: 'Status updated', data: donation });
 });
@@ -409,8 +424,10 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   donationObj.displayStatus = displayLabel;
   donationObj.statusLabel = displayLabel;
   donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-  donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-  donationObj.claimedByMe = isClaimedByMe;
+  donationObj.isClaimed = !!(isClaimedByMe || donation.assignedVolunteerId);
+  donationObj.claimedByMe = !!isClaimedByMe;
+  donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
+  donationObj.isRejected = dbStatus === 'rejected';
   
   res.status(200).json({ success: true, data: donationObj });
 });
@@ -440,7 +457,11 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
 
   await Sponsor.findOneAndUpdate({ userId: donor._id }, { $inc: { totalContributed: amount } });
 
-  await sendNotification(donor._id, 'Payment Received', `Your donation of ${amount} ${currency || 'USD'} has been processed.`, 'approval', 'checkmark');
+  try {
+    await sendNotification(donor._id, 'Payment Received', `Your donation of ${amount} ${currency || 'USD'} has been processed.`, 'approval', 'checkmark');
+  } catch (err) {
+    console.error('Notification Error:', err.message);
+  }
 
   res.status(200).json({ success: true, message: 'Processed' });
 });
@@ -451,7 +472,11 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
 const submitMonetaryDonation = asyncHandler(async (req, res, next) => {
   const { amount, eventId } = req.body;
   const donation = await MonetaryDonation.create({ sponsorId: req.user._id, eventId, amount, status: 'pending', paymentMethod: 'Zeffy' });
-  await sendNotification(req.user._id, 'Donation Pledge Recorded', `Your pledge has been recorded.`, 'update', 'info');
+  try {
+    await sendNotification(req.user._id, 'Donation Pledge Recorded', `Your pledge has been recorded.`, 'update', 'info');
+  } catch (err) {
+    console.error('Notification Error:', err.message);
+  }
   res.status(201).json({ success: true, data: donation });
 });
 
