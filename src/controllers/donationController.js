@@ -204,6 +204,7 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     donationObj.status = dbStatus;
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
+    donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     donationObj.isClaimed = !!donation.assignedVolunteerId;
     
     return donationObj;
@@ -258,10 +259,23 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     // 3. Status Labels (Capitalized)
     const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
+    
+    const statusColors = {
+      approved: '#22c55e', // Green
+      scheduled: '#3b82f6', // Blue
+      completed: '#6b7280', // Grey
+      pickedup: '#6b7280', // Grey
+      delivered: '#6b7280', // Grey
+      rejected: '#ef4444', // Red
+      pending: '#f97316', // Orange
+      offered: '#eab308', // Yellow/Gold
+      claimed: '#eab308'  // Yellow/Gold
+    };
 
     // 4. Personalized Status Logic
-    const isClaimedByPartner = partnerClaimedDonations.includes(donation._id.toString());
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
+    
+    donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     
     if (userRole === 'partner') {
         if (isFinalized) {
@@ -433,10 +447,23 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     // 3. Status Labels (Capitalized)
     const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
+    
+    const statusColors = {
+      approved: '#22c55e', // Green
+      scheduled: '#3b82f6', // Blue
+      completed: '#6b7280', // Grey
+      pickedup: '#6b7280', // Grey
+      delivered: '#6b7280', // Grey
+      rejected: '#ef4444', // Red
+      pending: '#f97316', // Orange
+      offered: '#eab308', // Yellow/Gold
+      claimed: '#eab308'  // Yellow/Gold
+    };
 
     // 4. Personalized Status Logic
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
+    donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     if (isFinalized) {
         donationObj.status = displayLabel; // Force Capitalized "Approved"
         donationObj.displayStatus = displayLabel;
@@ -619,11 +646,24 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     // 3. Status Labels (Capitalized)
     const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
+    
+    const statusColors = {
+      approved: '#22c55e', // Green
+      scheduled: '#3b82f6', // Blue
+      completed: '#6b7280', // Grey
+      pickedup: '#6b7280', // Grey
+      delivered: '#6b7280', // Grey
+      rejected: '#ef4444', // Red
+      pending: '#f97316', // Orange
+      offered: '#eab308', // Yellow/Gold
+      claimed: '#eab308'  // Yellow/Gold
+    };
 
     // 4. Personalized Status Logic
     const isClaimedByPartner = partnerClaimedDonations.includes(donation._id.toString());
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
+    donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     if (userRole === 'partner') {
         if (isFinalized) {
             donationObj.status = displayLabel; // Force Capitalized "Approved"

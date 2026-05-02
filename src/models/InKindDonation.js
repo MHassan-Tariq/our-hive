@@ -127,9 +127,17 @@ const InKindDonationSchema = new mongoose.Schema(
 
 // Pre-save hook to generate refId and donationId
 InKindDonationSchema.pre('save', async function () {
+  const model = this.constructor;
+
   if (!this.refId) {
-    const random = Math.floor(1000 + Math.random() * 9000);
-    this.refId = `OH-${random}`;
+    let code;
+    let exists = true;
+    while (exists) {
+      const random = Math.floor(1000 + Math.random() * 9000);
+      code = `OH-${random}`;
+      exists = await model.findOne({ refId: code });
+    }
+    this.refId = code;
   }
 
   if (!this.donationId) {
@@ -140,7 +148,7 @@ InKindDonationSchema.pre('save', async function () {
       const num = Math.floor(100 + Math.random() * 900); // three digits
       code = `don-${num}`;
       // check database for collision
-      exists = await mongoose.models.InKindDonation.findOne({ donationId: code });
+      exists = await model.findOne({ donationId: code });
     }
     this.donationId = code;
   }

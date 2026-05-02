@@ -1078,29 +1078,36 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
  */
 const adminCreatePartnerPickup = asyncHandler(async (req, res, next) => {
   const { itemName, itemCategory, quantity, description, pickupAddress } = req.body;
-  let image = '';
+  let imageUrl = '';
   if (req.file) {
-    image = req.file.path;
+    imageUrl = req.file.path;
   }
 
-  // Admin initiates the pickup
-  const donation = await InKindDonation.create({
-    donorId: req.user._id,
-    itemName,
-    itemCategory: itemCategory || 'General',
-    quantity,
-    description,
-    pickupAddress,
-    status: 'offered', // Available for partners
-    title: itemName || 'Community Partner Pickup',
-    deliveryMethod: 'pickup',
-  });
+  try {
+    // Admin initiates the pickup
+    const donation = await InKindDonation.create({
+      donorId: req.user._id,
+      itemName,
+      itemCategory: itemCategory || 'General',
+      quantity,
+      description,
+      pickupAddress,
+      status: 'offered', // Available for partners
+      title: itemName || 'Community Partner Pickup',
+      deliveryMethod: 'pickup',
+      image: imageUrl, // Save the image path
+      source: 'web'
+    });
 
-  res.status(201).json({
-    success: true,
-    message: 'Partner pickup created successfully',
-    data: donation
-  });
+    res.status(201).json({
+      success: true,
+      message: 'Partner pickup created successfully',
+      data: donation
+    });
+  } catch (error) {
+    console.error('Error in adminCreatePartnerPickup:', error);
+    return next(new ErrorResponse(`Failed to create pickup: ${error.message}`, 400));
+  }
 });
 
 /**
