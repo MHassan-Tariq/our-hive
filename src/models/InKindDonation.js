@@ -115,6 +115,10 @@ const InKindDonationSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    source: {
+      type: String,
+      default: 'web', // 'web' or 'app'
+    },
   },
   {
     timestamps: true,

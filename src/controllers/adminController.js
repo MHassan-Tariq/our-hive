@@ -966,32 +966,32 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
   const skip = (page - 1) * limit;
   const { search, status } = req.query;
 
-  // 1. Find all users with role 'partner'
   const partnerUsers = await User.find({ role: 'partner' }).select('_id');
   const partnerUserIds = partnerUsers.map(u => u._id);
 
-  const query = { 
+  // Base query for partner-related donations
+  let query = { 
     $or: [
       { donorId: { $in: partnerUserIds } },
-      { recipientId: { $in: partnerUserIds } }
+      { recipientId: { $in: partnerUserIds } },
+      { status: 'offered' }
     ]
   };
 
+  // Apply status filter if provided
   if (status) {
     query.status = status;
   }
 
+  // Handle Search logic
   if (search) {
     const regex = { $regex: search, $options: 'i' };
-
-    // Find partner users matching the search to extract their IDs
     const matchingUsers = await User.find({
       role: 'partner',
       $or: [{ firstName: regex }, { lastName: regex }, { email: regex }]
     }).select('_id');
     const matchingUserIds = matchingUsers.map(u => u._id);
 
-    // Combine the partner restriction with the search criteria
     const searchFilter = {
       $or: [
         { itemName: regex },
@@ -1000,36 +1000,7 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
         { recipientId: { $in: matchingUserIds } }
       ]
     };
-
-    // Use $and to ensure both the partner restriction and search criteria are met
-    const finalQuery = {
-      $and: [query, searchFilter]
-    };
-
-    const total = await InKindDonation.countDocuments(finalQuery);
-    const donations = await InKindDonation.find(finalQuery)
-      .populate('donorId', 'firstName lastName email role')
-      .populate('recipientId', 'firstName lastName email role')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Stats for the pickups page
-    const pendingCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'pending' });
-    const scheduledCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'scheduled' });
-    const completedCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'completed' });
-
-    return res.status(200).json({
-      success: true,
-      stats: { pendingCount, scheduledCount, completedCount },
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit),
-        count: donations.length
-      },
-      data: donations
-    });
+    query = { $and: [query, searchFilter] };
   }
 
   const total = await InKindDonation.countDocuments(query);
@@ -1040,17 +1011,55 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     .skip(skip)
     .limit(limit);
 
-  // Stats for the pickups page
-  const pendingCount = await InKindDonation.countDocuments({ ...query, status: 'pending' });
-  const scheduledCount = await InKindDonation.countDocuments({ ...query, status: 'scheduled' });
-  const completedCount = await InKindDonation.countDocuments({ ...query, status: 'completed' });
+  // Map results to add specific "App Claimed" flag for the UI
+  const processedDonations = donations.map(donation => {
+    const donationObj = donation.toObject();
+    
+    // Safety check: If assigned to someone but still says 'offered', treat as claimed
+    if (donationObj.status === 'offered' && (donationObj.recipientId || donationObj.assignedVolunteerId)) {
+        donationObj.status = 'claimed';
+    }
+
+    // Logic: If status is claimed AND source is 'app'
+    if (donationObj.status === 'claimed' && donationObj.source === 'app') {
+      donationObj.displayStatus = 'App Claimed';
+    } else {
+      donationObj.displayStatus = donationObj.status;
+    }
+    return donationObj;
+  });
+
+  // Aggregated Stats
+  const [pending, claimed, scheduled, completed, appClaimed] = await Promise.all([
+    InKindDonation.countDocuments({ ...query, status: 'pending' }),
+    InKindDonation.countDocuments({ 
+        ...query, 
+        $or: [
+            { status: 'claimed' },
+            { status: 'offered', $or: [{ recipientId: { $ne: null } }, { assignedVolunteerId: { $ne: null } }] }
+        ]
+    }),
+    InKindDonation.countDocuments({ ...query, status: 'scheduled' }),
+    InKindDonation.countDocuments({ ...query, status: 'completed' }),
+    // Specific count for app-based claims
+    InKindDonation.countDocuments({ 
+        ...query, 
+        source: 'app',
+        $or: [
+            { status: 'claimed' },
+            { status: 'offered', $or: [{ recipientId: { $ne: null } }, { assignedVolunteerId: { $ne: null } }] }
+        ]
+    })
+  ]);
 
   res.status(200).json({
     success: true,
-    stats: {
-      pendingCount,
-      scheduledCount,
-      completedCount
+    stats: { 
+      pendingCount: pending, 
+      claimedCount: claimed, 
+      appClaimedCount: appClaimed, // New stat for visibility
+      scheduledCount: scheduled, 
+      completedCount: completed 
     },
     pagination: {
       total,
@@ -1058,7 +1067,39 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
       pages: Math.ceil(total / limit),
       count: donations.length
     },
-    data: donations
+    data: processedDonations
+  });
+});
+
+/**
+ * @desc    Admin Create Partner Pickup
+ * @route   POST /api/admin/partner-pickups
+ * @access  Private (Admin only)
+ */
+const adminCreatePartnerPickup = asyncHandler(async (req, res, next) => {
+  const { itemName, itemCategory, quantity, description, pickupAddress } = req.body;
+  let image = '';
+  if (req.file) {
+    image = req.file.path;
+  }
+
+  // Admin initiates the pickup
+  const donation = await InKindDonation.create({
+    donorId: req.user._id,
+    itemName,
+    itemCategory: itemCategory || 'General',
+    quantity,
+    description,
+    pickupAddress,
+    status: 'offered', // Available for partners
+    title: itemName || 'Community Partner Pickup',
+    deliveryMethod: 'pickup',
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Partner pickup created successfully',
+    data: donation
   });
 });
 
@@ -2549,4 +2590,5 @@ module.exports = {
   updateUserRole,
   adminCreateManualDonation,
   adminDeleteInKindDonation,
+  adminCreatePartnerPickup,
 };

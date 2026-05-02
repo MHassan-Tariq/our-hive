@@ -62,6 +62,7 @@ const {
   updateUserRole,
   adminCreateManualDonation,
   adminDeleteInKindDonation,
+  adminCreatePartnerPickup,
 } = require('../controllers/adminController');
 
 // PUBLIC-ISH route: PDF viewer with inline auth (opens in new tab, no Authorization header)
@@ -859,6 +860,7 @@ router.get('/in-kind-donations', adminListInKindDonations);
 router.post('/in-kind-donations', adminCreateManualDonation);
 router.delete('/in-kind-donations/:id', adminDeleteInKindDonation);
 router.get('/partner-pickups', adminListPartnerPickups);
+router.post('/partner-pickups', upload.single('image'), adminCreatePartnerPickup);
 
 /**
  * @swagger

@@ -259,7 +259,7 @@ router.get('/available', authorize('volunteer'), getAvailablePickups);
  *     summary: Claim an item for pickup (Volunteer only)
  *     tags: [Donations]
  */
-router.post('/:id/claim', authorize('volunteer'), claimDonation);
+router.post('/:id/claim', authorize('volunteer', 'partner'), claimDonation);
 
 /**
  * @swagger

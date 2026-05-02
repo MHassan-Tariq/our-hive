@@ -336,10 +336,37 @@ const getDashboardData = async (req, res) => {
       .limit(10);
 
     // 3. Get Assigned Pickups (where this partner is the recipient)
-    const pendingPickups = await InKindDonation.find({
+    const rawPickups = await InKindDonation.find({
       recipientId: partnerId,
       status: { $ne: 'delivered' },
-    }).populate('donorId', 'name');
+    }).populate('donorId', 'firstName lastName name');
+
+    // Fetch partner claimed donations for transformation
+    const partnerProfile = await PartnerProfile.findOne({ userId: partnerId });
+    const partnerClaimedDonations = partnerProfile ? (partnerProfile.claimedDonations || []).map(id => id.toString()) : [];
+
+    // Transform Pickups
+    const pendingPickups = rawPickups.map(donation => {
+      const donationObj = donation.toObject();
+      
+      const dbStatus = (donationObj.status || 'offered').toLowerCase();
+      const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
+      
+      const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const displayLabel = isFinalized ? capitalize(dbStatus) : 'Claimed';
+
+      const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
+                            (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
+
+      donationObj.status = displayLabel; // Force Capitalized
+      donationObj.displayStatus = displayLabel;
+      donationObj.statusLabel = displayLabel;
+      donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
+      donationObj.isClaimed = true;
+      donationObj.claimedByMe = isClaimedByMe;
+      
+      return donationObj;
+    });
 
     // 4. Get User Profile (for greeting firstName)
     const user = await User.findById(partnerId).select('firstName lastName email');
@@ -347,7 +374,7 @@ const getDashboardData = async (req, res) => {
     // 5. Get Total Pickups count
     const totalPickups = await InKindDonation.countDocuments({
       recipientId: partnerId,
-      status: { $in: ['PickedUp', 'Delivered'] }
+      status: { $in: ['PickedUp', 'Delivered', 'pickedup', 'delivered'] }
     });
 
     res.status(200).json({
