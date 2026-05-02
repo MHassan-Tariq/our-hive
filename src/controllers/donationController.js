@@ -189,7 +189,9 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     const donationObj = donation.toObject();
     
     // 1. Core Status Normalization
-    const dbStatus = (donationObj.status || 'offered').toLowerCase();
+    let dbStatus = (donationObj.status || 'offered').toLowerCase();
+    if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+    
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
     
     // 2. Base fields
@@ -248,7 +250,9 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     const isClaimedByPartner = partnerClaimedDonations.includes(donation._id.toString());
     
     // 1. Core Status Normalization
-    const dbStatus = (donationObj.status || 'offered').toLowerCase();
+    let dbStatus = (donationObj.status || 'offered').toLowerCase();
+    if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+    
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
     const userRole = (req.user && req.user.role || '').toLowerCase();
     
@@ -408,7 +412,9 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByPartner = partnerClaimedDonations.some(id => id.toString() === donation._id.toString());
     
     // 1. Core Status Normalization
-    const dbStatus = (donationObj.status || 'offered').toLowerCase();
+    let dbStatus = (donationObj.status || 'offered').toLowerCase();
+    if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+    
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
     
     // 2. Base fields
@@ -596,7 +602,9 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     const donationObj = donation.toObject();
     
     // 1. Core Status Normalization
-    const dbStatus = (donationObj.status || 'offered').toLowerCase();
+    let dbStatus = (donationObj.status || 'offered').toLowerCase();
+    if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+    
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
     const userRole = (req.user && req.user.role || '').toLowerCase();
     
@@ -770,7 +778,9 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   }
 
   // 🔒 1. Core Status Normalization
-  const dbStatus = (donationData.status || 'offered').toLowerCase();
+  let dbStatus = (donationData.status || 'offered').toLowerCase();
+  if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+  
   const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
   const userRole = (req.user && req.user.role || '').toLowerCase();
 

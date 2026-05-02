@@ -349,7 +349,9 @@ const getDashboardData = async (req, res) => {
     const pendingPickups = rawPickups.map(donation => {
       const donationObj = donation.toObject();
       
-      const dbStatus = (donationObj.status || 'offered').toLowerCase();
+      let dbStatus = (donationObj.status || 'offered').toLowerCase();
+      if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+      
       const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
       
       const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
