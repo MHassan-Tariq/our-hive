@@ -25,7 +25,6 @@ const statusColors = {
 // Shared Capitalization Utility
 const capitalize = (s) => {
   if (!s) return '';
-  // Special case for 'pickedup' -> 'Picked Up'
   if (s.toLowerCase() === 'pickedup') return 'Picked Up';
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
@@ -48,7 +47,6 @@ const offerItem = asyncHandler(async (req, res, next) => {
     petInfo,
   } = req.body;
 
-  // Handle address parsing if it's a string
   let parsedAddress = pickupAddress;
   if (typeof pickupAddress === 'string') {
     try { parsedAddress = JSON.parse(pickupAddress); } catch (e) {}
@@ -66,10 +64,9 @@ const offerItem = asyncHandler(async (req, res, next) => {
     additionalNotes,
     petInfo: typeof petInfo === 'string' ? JSON.parse(petInfo) : petInfo,
     image: req.file ? req.file.path : null,
-    status: 'pending', // Default to pending for donor offers
+    status: 'pending',
   });
 
-  // OneSignal Notification
   await sendNotification(
     req.user._id,
     'Donation Offer Received',
@@ -87,18 +84,13 @@ const offerItem = asyncHandler(async (req, res, next) => {
 
 /**
  * @desc    Get all donations posted by the logged-in donor
- * @route   GET /api/donations/my-donations
- * @access  Private (donor)
  */
 const getMyDonations = asyncHandler(async (req, res, next) => {
   const { search } = req.query;
   let query = { donorId: req.user._id };
 
   if (search) {
-    query.$or = [
-      { itemName: { $regex: search, $options: 'i' } },
-      { refId: { $regex: search, $options: 'i' } },
-    ];
+    query.$or = [{ itemName: { $regex: search, $options: 'i' } }, { refId: { $regex: search, $options: 'i' } }];
   }
 
   const donations = await InKindDonation.find(query)
@@ -107,7 +99,6 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
-    
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
     if (dbStatus === 'available') dbStatus = 'offered';
     
@@ -125,17 +116,11 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  res.status(200).json({
-    success: true,
-    count: transformedDonations.length,
-    data: transformedDonations,
-  });
+  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
 });
 
 /**
- * @desc    Get all available pickup items (status = 'offered')
- * @route   GET /api/donations/available-pickups
- * @access  Private (volunteer)
+ * @desc    Get all available pickup items
  */
 const getAvailablePickups = asyncHandler(async (req, res, next) => {
   const donations = await InKindDonation.find({})
@@ -147,13 +132,12 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
   if (req.user && req.user.role === 'partner') {
     const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
     if (partnerProfile) {
-      partnerClaimedDonations = partnerProfile.claimedDonations.map(id => id.toString());
+      partnerClaimedDonations = (partnerProfile.claimedDonations || []).map(id => id.toString());
     }
   }
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
-    
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
     if (dbStatus === 'available') dbStatus = 'offered';
     
@@ -173,17 +157,11 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  res.status(200).json({
-    success: true,
-    count: transformedDonations.length,
-    data: transformedDonations,
-  });
+  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
 });
 
 /**
- * @desc    Claim a donation item (volunteer picks it up)
- * @route   PATCH /api/donations/:id/claim
- * @access  Private (volunteer)
+ * @desc    Claim a donation item
  */
 const claimDonation = asyncHandler(async (req, res, next) => {
   const donation = await InKindDonation.findById(req.params.id);
@@ -193,10 +171,7 @@ const claimDonation = asyncHandler(async (req, res, next) => {
   }
 
   if (donation.assignedVolunteerId) {
-    if (donation.assignedVolunteerId.toString() === req.user._id.toString()) {
-      return next(new ErrorResponse('You have already claimed this item.', 400));
-    }
-    return next(new ErrorResponse('This item has already been claimed by another volunteer.', 400));
+    return next(new ErrorResponse('This item has already been claimed.', 400));
   }
 
   donation.assignedVolunteerId = req.user._id;
@@ -214,21 +189,11 @@ const claimDonation = asyncHandler(async (req, res, next) => {
 
   await donation.save();
 
-  const populated = await InKindDonation.findById(donation._id)
-    .populate('donorId', 'firstName lastName email')
-    .populate('assignedVolunteerId', 'firstName lastName email');
-
-  res.status(200).json({
-    success: true,
-    message: `Item claimed! Pickup address is now available.`,
-    data: populated,
-  });
+  res.status(200).json({ success: true, message: 'Item claimed!', data: donation });
 });
 
 /**
- * @desc    Get donations assigned to the logged-in partner (recipient)
- * @route   GET /api/donations/assigned
- * @access  Private (partner)
+ * @desc    Get assigned donations
  */
 const getAssignedDonations = asyncHandler(async (req, res, next) => {
   const partnerId = req.user._id;
@@ -247,150 +212,76 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     ]
   };
 
-  if (status) {
-    const normalizedStatus = status.toLowerCase();
-    if (normalizedStatus === 'pending') {
-      query.status = { $in: ['offered', 'pending', 'available'] };
-    } else if (normalizedStatus === 'claimed') {
-      query.status = { $in: ['claimed', 'approved', 'scheduled'] };
-    } else {
-      query.status = normalizedStatus;
-    }
+  if (status && status !== 'all') {
+    query.status = status.toLowerCase();
   }
 
   if (search) {
-    query.$or = [
-      { itemName: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
-    ];
+    query.itemName = { $regex: search, $options: 'i' };
   }
 
-  const donations = await InKindDonation.find(query)
-    .populate('donorId', 'firstName lastName email')
-    .populate('assignedVolunteerId', 'firstName lastName email phone')
-    .sort({ createdAt: -1 });
+  const donations = await InKindDonation.find(query).populate('donorId', 'firstName lastName email').sort({ createdAt: -1 });
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
-    
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
-    if (dbStatus === 'available') dbStatus = 'offered';
-    
     const displayLabel = capitalize(dbStatus);
-    const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
-                          (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
-
+    
     donationObj.status = displayLabel;
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
-    donationObj.claimedByMe = isClaimedByMe;
-    donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
-    donationObj.isRejected = dbStatus === 'rejected';
-
+    
     return donationObj;
   });
 
-  res.status(200).json({
-    success: true,
-    count: transformedDonations.length,
-    data: transformedDonations,
-  });
+  res.status(200).json({ success: true, data: transformedDonations });
 });
 
 /**
  * @desc    Get donor dashboard stats
- * @route   GET /api/donations/donor-dashboard
- * @access  Private (donor)
  */
 const getDonorDashboard = asyncHandler(async (req, res, next) => {
   const donorId = req.user._id;
-
   const donations = await InKindDonation.find({ donorId });
-  const totalDonations = donations.length;
-  const pendingDonations = donations.filter(d => d.status === 'pending').length;
-  const approvedDonations = donations.filter(d => ['approved', 'scheduled', 'completed'].includes(d.status)).length;
-  
   const donorProfile = await DonorProfile.findOne({ userId: donorId });
 
   res.status(200).json({
     success: true,
     data: {
-      totalDonations,
-      pendingDonations,
-      approvedDonations,
-      monthlyGoal: donorProfile ? donorProfile.monthlyGoal : 0,
-      impactProgress: Math.min(100, (totalDonations / (donorProfile?.monthlyGoal || 10)) * 100)
+      totalDonations: donations.length,
+      pendingDonations: donations.filter(d => d.status === 'pending').length,
+      approvedDonations: donations.filter(d => ['approved', 'scheduled', 'completed'].includes(d.status)).length,
+      impactProgress: 0
     }
   });
 });
 
 /**
  * @desc    Update donor profile
- * @route   PATCH /api/donations/profile
- * @access  Private (donor)
  */
 const updateDonorProfile = asyncHandler(async (req, res, next) => {
   const { monthlyGoal } = req.body;
-
-  const donorProfile = await DonorProfile.findOneAndUpdate(
-    { userId: req.user._id },
-    { $set: { monthlyGoal } },
-    { new: true, upsert: true, runValidators: true }
-  );
-
-  res.status(200).json({
-    success: true,
-    data: donorProfile,
-  });
+  const profile = await DonorProfile.findOneAndUpdate({ userId: req.user._id }, { monthlyGoal }, { new: true, upsert: true });
+  res.status(200).json({ success: true, data: profile });
 });
 
 /**
  * @desc    Update a pending in-kind donation
- * @route   PATCH /api/donations/:id
- * @access  Private (donor)
  */
 const updateDonation = asyncHandler(async (req, res, next) => {
-  const { id } = req.params;
-  const donation = await InKindDonation.findOne({ _id: id, donorId: req.user._id });
-
-  if (!donation) {
-    return next(new ErrorResponse('Donation not found', 404));
-  }
-
-  if (donation.status !== 'pending') {
-    return next(new ErrorResponse('Only pending donations can be edited', 400));
-  }
-
-  const fieldsToUpdate = ['itemName', 'itemCategory', 'description', 'pickupAddress', 'quantity', 'estimatedValue', 'deliveryMethod', 'additionalNotes', 'petInfo'];
-  fieldsToUpdate.forEach(field => {
-    if (req.body[field] !== undefined) {
-      if (typeof req.body[field] === 'string' && (field === 'pickupAddress' || field === 'petInfo')) {
-        try { donation[field] = JSON.parse(req.body[field]); } catch (e) { donation[field] = req.body[field]; }
-      } else {
-        donation[field] = req.body[field];
-      }
-    }
-  });
-
-  if (req.file) {
-    donation.image = req.file.path;
-  }
-
+  const donation = await InKindDonation.findOne({ _id: req.params.id, donorId: req.user._id });
+  if (!donation) return next(new ErrorResponse('Donation not found', 404));
+  
+  Object.assign(donation, req.body);
+  if (req.file) donation.image = req.file.path;
   await donation.save();
-
-  res.status(200).json({
-    success: true,
-    message: 'Donation updated successfully',
-    data: donation,
-  });
+  
+  res.status(200).json({ success: true, data: donation });
 });
 
 /**
  * @desc    Get all in-kind donations (public/partner feed)
- * @route   GET /api/donations/all
- * @access  Public/Partner
  */
 const getAllDonations = asyncHandler(async (req, res, next) => {
   const { search, category, status } = req.query;
@@ -415,8 +306,6 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     const normalizedStatus = status.toLowerCase();
     if (normalizedStatus === 'claimed' && req.user?.role === 'partner') {
       query._id = { $in: partnerClaimedDonations };
-    } else if (normalizedStatus === 'pending') {
-      query.status = 'pending';
     } else {
       query.status = normalizedStatus;
     }
@@ -429,7 +318,6 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
-    
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
     if (dbStatus === 'available') dbStatus = 'offered';
     
@@ -449,11 +337,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  res.status(200).json({
-    success: true,
-    count: transformedDonations.length,
-    data: transformedDonations
-  });
+  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
 });
 
 /**
@@ -463,16 +347,26 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
   const { donationId } = req.params;
   let { status } = req.body;
   
-  const donation = await InKindDonation.findById(donationId);
-  if (!donation) {
-    return next(new ErrorResponse('Donation not found', 404));
-  }
-
-  donation.status = status.toLowerCase();
-  if (req.file) {
-    donation.image = req.file.path;
+  if (status && typeof status === 'string') {
+    status = status.replace(/^["'](.+)["']$/, '$1').trim().toLowerCase();
   }
   
+  const donation = await InKindDonation.findById(donationId);
+  if (!donation) return next(new ErrorResponse('Donation not found', 404));
+
+  if (['claimed', 'pickedup', 'delivered'].includes(status) && req.user) {
+    donation.recipientId = req.user._id;
+    if (status === 'claimed' && req.user.role === 'partner') {
+      await PartnerProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $addToSet: { claimedDonations: donationId } },
+        { new: true, upsert: true }
+      );
+    }
+  }
+
+  donation.status = status;
+  if (req.file) donation.image = req.file.path;
   await donation.save();
 
   await sendNotification(
@@ -483,42 +377,29 @@ const ChangeDonationStatus = asyncHandler(async (req, res, next) => {
     'info'
   );
 
-  res.status(200).json({
-    success: true,
-    message: 'Donation status updated successfully',
-    data: donation,
-  });
+  res.status(200).json({ success: true, message: 'Status updated', data: donation });
 });
 
 /**
- * @desc    Get a specific in-kind donation by ID
- * @route   GET /api/donations/:id
- * @access  Public
+ * @desc    Get specific donation by ID
  */
 const getInKindDonationById = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
-
   const donation = await InKindDonation.findById(id)
     .populate('donorId', 'firstName lastName email')
     .populate('assignedVolunteerId', 'firstName lastName email phone')
     .populate('recipientId', 'firstName lastName email');
 
-  if (!donation) {
-    return next(new ErrorResponse('In-kind donation not found', 404));
-  }
+  if (!donation) return next(new ErrorResponse('Donation not found', 404));
 
   const donationObj = donation.toObject();
   let dbStatus = (donationObj.status || 'offered').toLowerCase();
-  if (dbStatus === 'available') dbStatus = 'offered';
-  
   const displayLabel = capitalize(dbStatus);
   
   let isClaimedByMe = false;
   if (req.user && req.user.role === 'partner') {
     const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
-    if (partnerProfile) {
-      isClaimedByMe = (partnerProfile.claimedDonations || []).some(cid => cid.toString() === id);
-    }
+    if (partnerProfile) isClaimedByMe = (partnerProfile.claimedDonations || []).some(cid => cid.toString() === id);
   }
   if (!isClaimedByMe && donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
     isClaimedByMe = true;
@@ -530,21 +411,38 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
   donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
   donationObj.claimedByMe = isClaimedByMe;
-  donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
-  donationObj.isRejected = dbStatus === 'rejected';
-
-  res.status(200).json({
-    success: true,
-    data: donationObj,
-  });
+  
+  res.status(200).json({ success: true, data: donationObj });
 });
 
 /**
- * @desc    Zeffy Webhook Handler
+ * @desc    Zeffy Webhook Handler (via Zapier)
  */
 const zeffyWebhook = asyncHandler(async (req, res) => {
-  // Webhook logic (skipped for brevity, but preserved in intent)
-  res.status(200).json({ success: true });
+  let payload = req.body;
+  if (Array.isArray(payload) && payload.length > 0) payload = payload[0];
+  if (payload && payload.data && !payload.donor_email) payload = Array.isArray(payload.data) ? payload.data[0] : payload.data;
+
+  const { donation_id, donor_email, donor_name, amount, currency, transaction_date, campaign_name, payment_status, is_anonymous, organization_name, recurring } = payload;
+
+  if (!donor_email || !amount || !payment_status) return res.status(400).json({ success: false, message: 'Missing fields' });
+
+  if (payment_status !== 'completed' && payment_status !== 'succeeded') return res.status(200).json({ success: true, message: 'Skipped' });
+
+  let donor = await User.findOne({ email: donor_email });
+  if (!donor) {
+    const nameParts = (donor_name || 'Anonymous Donor').trim().split(' ');
+    donor = await User.create({ firstName: nameParts[0] || 'Anonymous', lastName: nameParts.slice(1).join(' ') || '', email: donor_email, password: Math.random().toString(36).slice(-10), role: 'sponsor', isApproved: true });
+    await Sponsor.create({ userId: donor._id, organizationName: organization_name || nameParts[0], isAnonymous: is_anonymous || false });
+  }
+
+  const donation = await MonetaryDonation.create({ sponsorId: donor._id, amount, currency: currency || 'USD', mealsProvided: Math.floor(amount / 2.5), paymentMethod: 'Zeffy', projectTitle: campaign_name || 'General Donation', isAnonymous: is_anonymous || false, isMonthly: recurring || false, transactionId: donation_id, status: 'completed' });
+
+  await Sponsor.findOneAndUpdate({ userId: donor._id }, { $inc: { totalContributed: amount } });
+
+  await sendNotification(donor._id, 'Payment Received', `Your donation of ${amount} ${currency || 'USD'} has been processed.`, 'approval', 'checkmark');
+
+  res.status(200).json({ success: true, message: 'Processed' });
 });
 
 /**
@@ -552,31 +450,19 @@ const zeffyWebhook = asyncHandler(async (req, res) => {
  */
 const submitMonetaryDonation = asyncHandler(async (req, res, next) => {
   const { amount, eventId } = req.body;
-  // Preservation of logic...
-  res.status(201).json({ success: true });
+  const donation = await MonetaryDonation.create({ sponsorId: req.user._id, eventId, amount, status: 'pending', paymentMethod: 'Zeffy' });
+  await sendNotification(req.user._id, 'Donation Pledge Recorded', `Your pledge has been recorded.`, 'update', 'info');
+  res.status(201).json({ success: true, data: donation });
 });
 
 /**
  * @desc    Get my monetary donations
  */
 const getMyMonetaryDonations = asyncHandler(async (req, res, next) => {
-  const donations = await MonetaryDonation.find({ sponsorId: req.user._id });
-  res.status(200).json({ success: true, data: donations });
+  const donations = await MonetaryDonation.find({ sponsorId: req.user._id }).populate('eventId', 'title').sort({ createdAt: -1 });
+  const totalAmount = donations.reduce((acc, d) => acc + (d.amount || 0), 0);
+  const formatted = donations.map(d => ({ name: d.projectTitle, date: d.date || d.createdAt, amount: d.amount, status: d.status }));
+  res.status(200).json({ success: true, totalDonationAmount: totalAmount, data: formatted });
 });
 
-module.exports = {
-  offerItem,
-  getMyDonations,
-  getAvailablePickups,
-  claimDonation,
-  getAssignedDonations,
-  getDonorDashboard,
-  updateDonorProfile,
-  updateDonation,
-  getAllDonations,
-  getInKindDonationById,
-  ChangeDonationStatus,
-  zeffyWebhook,
-  submitMonetaryDonation,
-  getMyMonetaryDonations
-};
+module.exports = { offerItem, getMyDonations, getAvailablePickups, claimDonation, getAssignedDonations, getDonorDashboard, updateDonorProfile, updateDonation, getAllDonations, getInKindDonationById, ChangeDonationStatus, zeffyWebhook, submitMonetaryDonation, getMyMonetaryDonations };
