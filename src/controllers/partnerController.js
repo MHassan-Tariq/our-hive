@@ -355,7 +355,7 @@ const getDashboardData = async (req, res) => {
       const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
       
       const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-      const displayLabel = isFinalized ? capitalize(dbStatus) : 'Claimed';
+      const displayLabel = capitalize(dbStatus);
 
       const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
                             (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
