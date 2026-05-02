@@ -27,27 +27,6 @@ const ROLES = [
   'admin',
 ];
 
-// Shared Color Palette for Statuses
-const statusColors = {
-  approved: '#22c55e', // Green
-  scheduled: '#3b82f6', // Blue
-  completed: '#6b7280', // Grey
-  pickedup: '#6b7280', // Grey
-  delivered: '#6b7280', // Grey
-  rejected: '#ef4444', // Red
-  pending: '#f97316', // Orange
-  offered: '#eab308', // Yellow/Gold
-  claimed: '#eab308',  // Yellow/Gold
-  'picked up': '#6b7280' // Grey
-};
-
-// Shared Capitalization Utility
-const capitalize = (s) => {
-  if (!s) return '';
-  if (s.toLowerCase() === 'pickedup') return 'Picked Up';
-  return s.charAt(0).toUpperCase() + s.slice(1);
-};
-
 /**
  * @desc    Get all users
  * @route   GET /api/admin/users
@@ -847,17 +826,13 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     iconType = 'checkmark';
   }
 
-  try {
-    await sendNotification(
-      donation.donorId,
-      title,
-      `Your in-kind donation of "${donation.itemName}" is now ${status}.`,
-      'update',
-      iconType
-    );
-  } catch (err) {
-    console.error('Notification Error:', err.message);
-  }
+  await sendNotification(
+    donation.donorId,
+    title,
+    `Your donation of "${donation.itemName}" is now ${status}.`,
+    'update',
+    iconType
+  );
 
   res.status(200).json({ success: true, data: donation });
 });
@@ -1036,24 +1011,21 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     .skip(skip)
     .limit(limit);
 
-  // Map results to add consistent status labels and colors
+  // Map results to add specific "App Claimed" flag for the UI
   const processedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
     
-    let dbStatus = (donationObj.status || 'offered').toLowerCase();
-    if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
+    // Safety check: If assigned to someone but still says 'offered', treat as claimed
+    if (donationObj.status === 'offered' && (donationObj.recipientId || donationObj.assignedVolunteerId)) {
+        donationObj.status = 'claimed';
+    }
 
-    const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
-    const displayLabel = capitalize(dbStatus);
-
-    donationObj.status = displayLabel; // Force Capitalized
-    donationObj.displayStatus = displayLabel;
-    donationObj.statusLabel = displayLabel;
-    donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    
-    donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
-    donationObj.isRejected = dbStatus === 'rejected';
-
+    // Logic: If status is claimed AND source is 'app'
+    if (donationObj.status === 'claimed' && donationObj.source === 'app') {
+      donationObj.displayStatus = 'App Claimed';
+    } else {
+      donationObj.displayStatus = donationObj.status;
+    }
     return donationObj;
   });
 

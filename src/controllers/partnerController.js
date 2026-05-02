@@ -349,13 +349,11 @@ const getDashboardData = async (req, res) => {
     const pendingPickups = rawPickups.map(donation => {
       const donationObj = donation.toObject();
       
-      let dbStatus = (donationObj.status || 'offered').toLowerCase();
-      if (dbStatus === 'available') dbStatus = 'offered'; // Standardize
-      
+      const dbStatus = (donationObj.status || 'offered').toLowerCase();
       const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
       
       const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-      const displayLabel = capitalize(dbStatus);
+      const displayLabel = isFinalized ? capitalize(dbStatus) : 'Claimed';
 
       const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
                             (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
@@ -364,7 +362,9 @@ const getDashboardData = async (req, res) => {
       donationObj.displayStatus = displayLabel;
       donationObj.statusLabel = displayLabel;
       donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
+      donationObj.isClaimed = true;
       donationObj.claimedByMe = isClaimedByMe;
+      
       return donationObj;
     });
 
@@ -391,7 +391,7 @@ const getDashboardData = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getDashboardData error:', err);
+    console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
