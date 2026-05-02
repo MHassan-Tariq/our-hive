@@ -260,7 +260,8 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
     // 4. Personalized Status Logic
-    const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === req.user._id.toString());
+    const isClaimedByPartner = partnerClaimedDonations.includes(donation._id.toString());
+    const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
     if (userRole === 'partner') {
         if (isFinalized) {
