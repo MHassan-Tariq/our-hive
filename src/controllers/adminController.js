@@ -758,7 +758,8 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     storageShelf, 
     storageFloor,
     sponsorId,
-    finalAmount
+    finalAmount,
+    recipientId
   } = req.body;
 
   if (status && !['pending', 'approved', 'scheduled', 'completed', 'rejected'].includes(status)) {
@@ -787,11 +788,17 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     updates.status = 'completed';
   }
 
+  if (recipientId) {
+    updates.recipientId = recipientId;
+    if (!updates.status) updates.status = 'scheduled';
+  }
+
   const donation = await InKindDonation.findByIdAndUpdate(
     req.params.id,
     updates,
     { new: true, runValidators: true }
-  ).populate('sponsorId', 'firstName lastName email');
+  ).populate('sponsorId', 'firstName lastName email')
+   .populate('recipientId', 'firstName lastName email role');
 
   if (!donation) {
     return next(new ErrorResponse('Donation not found', 404));
@@ -957,13 +964,22 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
-  const { search } = req.query;
+  const { search, status } = req.query;
 
   // 1. Find all users with role 'partner'
   const partnerUsers = await User.find({ role: 'partner' }).select('_id');
   const partnerUserIds = partnerUsers.map(u => u._id);
 
-  const query = { donorId: { $in: partnerUserIds } };
+  const query = { 
+    $or: [
+      { donorId: { $in: partnerUserIds } },
+      { recipientId: { $in: partnerUserIds } }
+    ]
+  };
+
+  if (status) {
+    query.status = status;
+  }
 
   if (search) {
     const regex = { $regex: search, $options: 'i' };
@@ -975,16 +991,51 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     }).select('_id');
     const matchingUserIds = matchingUsers.map(u => u._id);
 
-    query.$or = [
-      { itemName: regex },
-      { donorName: regex },
-      { donorId: { $in: matchingUserIds } }
-    ];
+    // Combine the partner restriction with the search criteria
+    const searchFilter = {
+      $or: [
+        { itemName: regex },
+        { donorName: regex },
+        { donorId: { $in: matchingUserIds } },
+        { recipientId: { $in: matchingUserIds } }
+      ]
+    };
+
+    // Use $and to ensure both the partner restriction and search criteria are met
+    const finalQuery = {
+      $and: [query, searchFilter]
+    };
+
+    const total = await InKindDonation.countDocuments(finalQuery);
+    const donations = await InKindDonation.find(finalQuery)
+      .populate('donorId', 'firstName lastName email role')
+      .populate('recipientId', 'firstName lastName email role')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Stats for the pickups page
+    const pendingCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'pending' });
+    const scheduledCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'scheduled' });
+    const completedCount = await InKindDonation.countDocuments({ ...finalQuery, status: 'completed' });
+
+    return res.status(200).json({
+      success: true,
+      stats: { pendingCount, scheduledCount, completedCount },
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        count: donations.length
+      },
+      data: donations
+    });
   }
 
   const total = await InKindDonation.countDocuments(query);
   const donations = await InKindDonation.find(query)
     .populate('donorId', 'firstName lastName email role')
+    .populate('recipientId', 'firstName lastName email role')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);

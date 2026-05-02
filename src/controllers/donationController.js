@@ -541,7 +541,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     } 
     else if (normalizedStatus === "pending") {
       query._id = { $nin: partnerClaimedDonations };
-      query.status = { $nin: ["pickedup", "delivered", "approved"] };
+      query.status = { $nin: ["pickedup", "delivered"] };
     } 
     else if (normalizedStatus !== "all") {
       query.status = normalizedStatus;
