@@ -203,8 +203,8 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
     // 4. Transform response
-    donationObj.status = dbStatus; // Keep raw for app logic (e.g. button text)
-    donationObj.displayStatus = displayLabel; // Capitalized for UI
+    donationObj.status = displayLabel; // Force Capitalized for mobile app string matching
+    donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     donationObj.isClaimed = !!donation.assignedVolunteerId;
@@ -280,7 +280,7 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.status = dbStatus; // Keep raw for app logic (e.g. button text)
+    donationObj.status = displayLabel; // Force Capitalized
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
@@ -441,7 +441,7 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.status = dbStatus; // Keep raw for app logic
+    donationObj.status = displayLabel; // Force Capitalized
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     
@@ -808,7 +808,7 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
   const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
   
   donationData.statusColor = statusColors[dbStatus] || '#A16D36';
-  donationData.status = dbStatus; // Keep raw for app logic (e.g. button text)
+  donationData.status = displayLabel; // Force Capitalized
   donationData.displayStatus = displayLabel;
   donationData.statusLabel = displayLabel;
   donationData.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;

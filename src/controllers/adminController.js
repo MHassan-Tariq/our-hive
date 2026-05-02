@@ -1035,7 +1035,7 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     const isFinalized = !['offered', 'pending', 'claimed'].includes(dbStatus);
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
-    donationObj.status = dbStatus; // Keep raw for app logic
+    donationObj.status = displayLabel; // Force Capitalized
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
