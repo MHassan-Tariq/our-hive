@@ -105,19 +105,19 @@ const optionalProtect = async (req, res, next) => {
     token = req.headers.authorization.split(' ')[1];
   }
 
-  if (!token) {
-    return next(); // continue without attaching a user
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
-    if (user) {
-      req.user = user;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password');
+      if (user) {
+        req.user = user;
+        console.log(`👤 [OPTIONAL-AUTH] User: ${user._id}, Role: ${user.role}`);
+      }
+    } catch (err) {
+      console.log('optionalProtect: token invalid, continuing as guest');
     }
-  } catch (err) {
-    // ignore errors; treat as unauthenticated
-    console.log('optionalProtect: token invalid, continuing as guest');
+  } else {
+    console.log('🔓 [OPTIONAL-AUTH] No token provided, continuing as guest');
   }
 
   next();

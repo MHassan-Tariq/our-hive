@@ -98,9 +98,16 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     query.$or = [{ itemName: { $regex: search, $options: 'i' } }, { refId: { $regex: search, $options: 'i' } }];
   }
 
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await InKindDonation.countDocuments(query);
   const donations = await InKindDonation.find(query)
     .populate('assignedVolunteerId', 'firstName lastName email phone')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
@@ -116,22 +123,54 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     donationObj.isClaimed = !!donation.assignedVolunteerId;
     donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
     donationObj.isRejected = dbStatus === 'rejected';
-    donationObj.claimedByMe = !!(donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
+    const isMine = !!(donation.assignedVolunteerId && req.user && 
+                   (donation.assignedVolunteerId._id ? donation.assignedVolunteerId._id.equals(req.user._id) : donation.assignedVolunteerId.equals(req.user._id)));
+    donationObj.claimedByMe = isMine;
     
     return donationObj;
   });
 
-  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
+  const [pendingCount, claimedCount, approvedCount] = await Promise.all([
+    InKindDonation.countDocuments({ status: 'pending' }),
+    InKindDonation.countDocuments({ status: 'claimed' }),
+    InKindDonation.countDocuments({ status: 'approved' })
+  ]);
+
+  res.status(200).json({ 
+    success: true, 
+    count: transformedDonations.length, 
+    stats: {
+      pendingCount,
+      claimedCount,
+      approvedCount,
+      totalCount: total
+    },
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: transformedDonations.length
+    },
+    data: transformedDonations 
+  });
 });
 
 /**
  * @desc    Get all available pickup items
  */
 const getAvailablePickups = asyncHandler(async (req, res, next) => {
-  const donations = await InKindDonation.find({})
+  const query = {};
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await InKindDonation.countDocuments(query);
+  const donations = await InKindDonation.find(query)
     .populate('donorId', 'firstName lastName email')
     .populate('assignedVolunteerId', 'firstName lastName email')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   let partnerClaimedDonations = [];
   if (req.user && req.user.role === 'partner') {
@@ -147,8 +186,9 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     if (dbStatus === 'available') dbStatus = 'offered';
     
     const displayLabel = capitalize(dbStatus);
-    const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
-                          (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
+    const vId = donation.assignedVolunteerId;
+    const isMine = !!(vId && req.user && (vId._id ? vId._id.equals(req.user._id) : vId.equals(req.user._id)));
+    const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || isMine;
 
     donationObj.status = displayLabel;
     donationObj.displayStatus = displayLabel;
@@ -162,7 +202,29 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
+  const [pendingCount, claimedCount, approvedCount] = await Promise.all([
+    InKindDonation.countDocuments({ status: 'pending' }),
+    InKindDonation.countDocuments({ status: 'claimed' }),
+    InKindDonation.countDocuments({ status: 'approved' })
+  ]);
+
+  res.status(200).json({ 
+    success: true, 
+    count: transformedDonations.length, 
+    stats: {
+      pendingCount,
+      claimedCount,
+      approvedCount,
+      totalCount: total
+    },
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: transformedDonations.length
+    },
+    data: transformedDonations 
+  });
 });
 
 /**
@@ -231,8 +293,9 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const donationObj = donation.toObject();
     let dbStatus = (donationObj.status || 'offered').toLowerCase();
     const displayLabel = capitalize(dbStatus);
-    const isClaimedByMe = !!(partnerClaimedDonations.includes(donation._id.toString()) || 
-                          (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString()));
+    const vId = donation.assignedVolunteerId;
+    const isMine = !!(vId && (vId._id ? vId._id.equals(partnerId) : vId.equals(partnerId)));
+    const isClaimedByMe = !!(partnerClaimedDonations.includes(donation._id.toString()) || isMine);
 
     donationObj.status = displayLabel;
     donationObj.displayStatus = displayLabel;
@@ -322,10 +385,17 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     }
   }
 
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await InKindDonation.countDocuments(query);
   const donations = await InKindDonation.find(query)
     .populate('donorId', 'firstName lastName email')
     .populate('assignedVolunteerId', 'firstName lastName email')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   const transformedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
@@ -333,8 +403,9 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     if (dbStatus === 'available') dbStatus = 'offered';
     
     const displayLabel = capitalize(dbStatus);
-    const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
-                          (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
+    const vId = donation.assignedVolunteerId;
+    const isMine = !!(vId && req.user && (vId._id ? vId._id.equals(req.user._id) : vId.equals(req.user._id)));
+    const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || isMine;
 
     donationObj.status = displayLabel;
     donationObj.displayStatus = displayLabel;
@@ -348,7 +419,30 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  res.status(200).json({ success: true, count: transformedDonations.length, data: transformedDonations });
+  // Aggregated Stats for the feed
+  const [pendingCount, claimedCount, approvedCount] = await Promise.all([
+    InKindDonation.countDocuments({ status: 'pending' }),
+    InKindDonation.countDocuments({ status: 'claimed' }),
+    InKindDonation.countDocuments({ status: 'approved' })
+  ]);
+
+  res.status(200).json({ 
+    success: true, 
+    count: transformedDonations.length, 
+    stats: {
+      pendingCount,
+      claimedCount,
+      approvedCount,
+      totalCount: total
+    },
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: transformedDonations.length
+    },
+    data: transformedDonations 
+  });
 });
 
 /**
@@ -416,7 +510,8 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
     const partnerProfile = await PartnerProfile.findOne({ userId: req.user._id });
     if (partnerProfile) isClaimedByMe = (partnerProfile.claimedDonations || []).some(cid => cid.toString() === id);
   }
-  if (!isClaimedByMe && donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString()) {
+  const vId = donation.assignedVolunteerId;
+  if (!isClaimedByMe && vId && req.user && (vId._id ? vId._id.equals(req.user._id) : vId.equals(req.user._id))) {
     isClaimedByMe = true;
   }
 

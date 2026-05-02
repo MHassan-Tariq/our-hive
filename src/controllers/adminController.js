@@ -1036,20 +1036,6 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     .skip(skip)
     .limit(limit);
 
-  // 3. Status Labels (Capitalized)
-  const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const statusColors = {
-    approved: '#22c55e', // Green
-    scheduled: '#3b82f6', // Blue
-    completed: '#6b7280', // Grey
-    pickedup: '#6b7280', // Grey
-    delivered: '#6b7280', // Grey
-    rejected: '#ef4444', // Red
-    pending: '#f97316', // Orange
-    offered: '#eab308', // Yellow/Gold
-    claimed: '#eab308'  // Yellow/Gold
-  };
-
   // Map results to add consistent status labels and colors
   const processedDonations = donations.map(donation => {
     const donationObj = donation.toObject();
