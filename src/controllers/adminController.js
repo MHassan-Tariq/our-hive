@@ -957,13 +957,13 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
-  const { search } = req.query;
+  const { search, status } = req.query;
 
   const partnerUsers = await User.find({ role: 'partner' }).select('_id');
   const partnerUserIds = partnerUsers.map(u => u._id);
 
-  // Base query for partner-related donations
-  let query = { 
+  // Base query for partner-related donations (used for stats)
+  const basePartnerQuery = { 
     $or: [
       { donorId: { $in: partnerUserIds } },
       { recipientId: { $in: partnerUserIds } },
@@ -971,9 +971,12 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     ]
   };
 
+  // List query (starts with base, then adds filters)
+  let listQuery = { ...basePartnerQuery };
+
   // Apply status filter if provided
   if (status) {
-    query.status = status;
+    listQuery.status = status;
   }
 
   // Handle Search logic
@@ -993,11 +996,11 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
         { recipientId: { $in: matchingUserIds } }
       ]
     };
-    query = { $and: [query, searchFilter] };
+    listQuery = { $and: [listQuery, searchFilter] };
   }
 
-  const total = await InKindDonation.countDocuments(query);
-  const donations = await InKindDonation.find(query)
+  const total = await InKindDonation.countDocuments(listQuery);
+  const donations = await InKindDonation.find(listQuery)
     .populate('donorId', 'firstName lastName email role')
     .populate('recipientId', 'firstName lastName email role')
     .sort({ createdAt: -1 })
@@ -1022,21 +1025,21 @@ const adminListPartnerPickups = asyncHandler(async (req, res, next) => {
     return donationObj;
   });
 
-  // Aggregated Stats
+  // Aggregated Stats based on basePartnerQuery (ignores status filter)
   const [pending, claimed, scheduled, completed, appClaimed] = await Promise.all([
-    InKindDonation.countDocuments({ ...query, status: 'pending' }),
+    InKindDonation.countDocuments({ ...basePartnerQuery, status: 'pending' }),
     InKindDonation.countDocuments({ 
-        ...query, 
+        ...basePartnerQuery, 
         $or: [
             { status: 'claimed' },
             { status: 'offered', $or: [{ recipientId: { $ne: null } }, { assignedVolunteerId: { $ne: null } }] }
         ]
     }),
-    InKindDonation.countDocuments({ ...query, status: 'scheduled' }),
-    InKindDonation.countDocuments({ ...query, status: 'completed' }),
+    InKindDonation.countDocuments({ ...basePartnerQuery, status: 'scheduled' }),
+    InKindDonation.countDocuments({ ...basePartnerQuery, status: 'completed' }),
     // Specific count for app-based claims
     InKindDonation.countDocuments({ 
-        ...query, 
+        ...basePartnerQuery, 
         source: 'app',
         $or: [
             { status: 'claimed' },

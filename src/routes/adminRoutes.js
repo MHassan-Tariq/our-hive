@@ -859,8 +859,8 @@ router.patch('/participants/:id/revoke-detailed', adminRevokeDetailedIntake);
 router.get('/in-kind-donations', adminListInKindDonations);
 router.post('/in-kind-donations', adminCreateManualDonation);
 router.delete('/in-kind-donations/:id', adminDeleteInKindDonation);
-router.get('/partner-pickups', adminListPartnerPickups);
-router.post('/partner-pickups', upload.single('image'), adminCreatePartnerPickup);
+router.get('/partner-pickups', authorize('admin'), adminListPartnerPickups);
+router.post('/partner-pickups', authorize('admin'), upload.single('image'), adminCreatePartnerPickup);
 
 /**
  * @swagger
