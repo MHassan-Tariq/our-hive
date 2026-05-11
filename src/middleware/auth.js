@@ -76,12 +76,17 @@ const authorize = (...roles) => {
     // Log route access attempt
     console.log(`🛡 Authorize check — Route: ${req.method} ${req.originalUrl} — User role: ${req.user?.role}`);
 
-    if (!roles.includes(req.user.role)) {
+    const hasRole = roles.includes(req.user.role);
+    const isModeratorOverride = req.user.isModerator && roles.includes('moderator');
+
+    if (!hasRole && !isModeratorOverride) {
       return res.status(403).json({
         success: false,
-        message: `Access denied — role '${req.user.role}' is not permitted to access this resource`,
+        message: `Access denied — user does not have required role or moderator privileges`,
       });
     }
+
+
     next();
   };
 };

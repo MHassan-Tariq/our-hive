@@ -103,6 +103,35 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
     data: user,
   });
 });
+
+/**
+ * @desc    Toggle a user's moderator status
+ * @route   PATCH /api/admin/users/:id/moderator
+ * @access  Private (Admin only)
+ */
+const updateUserModeratorStatus = asyncHandler(async (req, res, next) => {
+  const { isModerator } = req.body;
+
+  if (isModerator === undefined) {
+    return next(new ErrorResponse('Please provide isModerator status', 400));
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    { isModerator },
+    { new: true, runValidators: true }
+  );
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: user,
+  });
+});
+
 /**
  * @desc    Get admin dashboard — stats, activity feed, campaign goal, search
  * @route   GET /api/admin/dashboard
@@ -2600,4 +2629,6 @@ module.exports = {
   adminCreateManualDonation,
   adminDeleteInKindDonation,
   adminCreatePartnerPickup,
+  updateUserModeratorStatus,
+
 };

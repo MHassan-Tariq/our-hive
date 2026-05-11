@@ -25,7 +25,9 @@ const sendTokenResponse = async (user, statusCode, res) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      isModerator: user.isModerator,
       isApproved: user.isApproved,
+
       createdAt: user.createdAt,
     },
   };

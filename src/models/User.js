@@ -59,6 +59,11 @@ const UserSchema = new mongoose.Schema(
       enum: ROLES,
       default: 'visitor',
     },
+    isModerator: {
+      type: Boolean,
+      default: false,
+    },
+
     isApproved: {
       type: Boolean,
       default: false,
@@ -146,9 +151,11 @@ UserSchema.methods.getSignedJwtToken = function () {
   return jwt.sign({ 
     id: this._id, 
     role: this.role,
+    isModerator: this.isModerator,
     firstName: this.firstName,
     lastName: this.lastName,
     email: this.email
+
   }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '30d',
   });
