@@ -73,25 +73,27 @@ const getAllUsers = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const updateUserRole = asyncHandler(async (req, res, next) => {
-  const { role } = req.body;
-
-  if (!role || !ROLES.includes(role)) {
-    return next(new ErrorResponse('Please provide a valid role', 400));
-  }
+  const { isModerator } = req.body;
 
   console.log('DEBUG: updateUserRole params.id:', req.params.id);
   console.log('DEBUG: updateUserRole user.id:', req.user.id.toString());
-  console.log('DEBUG: updateUserRole new role:', role);
+  console.log('DEBUG: updateUserRole isModerator:', isModerator);
 
+  // Prevent changing yourself
   if (req.params.id === req.user.id.toString()) {
     console.log('DEBUG: Prevented self-role change');
-    return next(new ErrorResponse('You cannot change your own role', 400));
+    return next(new ErrorResponse('You cannot change your own moderator status', 400));
   }
 
   const user = await User.findByIdAndUpdate(
     req.params.id,
-    { role },
-    { new: true, runValidators: true }
+    {
+      isModerator: isModerator === true,
+    },
+    {
+      new: true,
+      runValidators: true,
+    }
   );
 
   if (!user) {
