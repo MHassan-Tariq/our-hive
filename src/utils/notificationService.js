@@ -1,6 +1,7 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const https = require('https');
+const sendEmail = require('./sendEmail');
 
 /**
  * Send a notification to a specific user
@@ -9,8 +10,9 @@ const https = require('https');
  * @param {string} message - Message body of the notification
  * @param {string} type - Enum: ['approval', 'reminder', 'update', 'system']
  * @param {string} iconType - Enum: ['checkmark', 'info']
+ * @param {string} htmlMessage - Optional HTML content for email
  */
-const sendNotification = async (userId, title, message, type = 'system', iconType = 'info') => {
+const sendNotification = async (userId, title, message, type = 'system', iconType = 'info', htmlMessage = null) => {
   try {
     // 1. Save to Database
     await Notification.create({
@@ -21,58 +23,78 @@ const sendNotification = async (userId, title, message, type = 'system', iconTyp
       iconType
     });
 
-    // 2. Fetch User's OneSignal ID
-    const user = await User.findById(userId).select('preferences.oneSignalUserId preferences.notificationEnabled');
+    // 2. Fetch User Details (OneSignal ID and Email)
+    const user = await User.findById(userId).select('email preferences.oneSignalUserId preferences.notificationEnabled');
     
-    if (!user || !user.preferences.notificationEnabled || !user.preferences.oneSignalUserId) {
-      const reason = !user ? 'User not found' : (!user.preferences.notificationEnabled ? 'Notifications disabled' : 'No Player ID');
-      console.log(`[Notification] Skip push for ${userId} (${reason}). Stored in database.`);
+    if (!user) {
+      console.log(`[Notification] User ${userId} not found. Stored in database only.`);
       return;
     }
 
-    // 3. Send via OneSignal REST API
-    const data = JSON.stringify({
-      app_id: process.env.ONESIGNAL_APP_ID,
-      include_player_ids: [user.preferences.oneSignalUserId],
-      headings: { en: title },
-      contents: { en: message },
-    });
-
-    const options = {
-      hostname: 'onesignal.com',
-      port: 443,
-      path: '/api/v1/notifications',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
+    // 3. Send Email Notification
+    if (user.email) {
+      try {
+        await sendEmail({
+          email: user.email,
+          subject: title,
+          message: message,
+          html: htmlMessage || `<div style="font-family: sans-serif; line-height: 1.5;"><h3>${title}</h3><p>${message}</p></div>`
+        });
+        console.log(`[Notification] Email sent to ${user.email}`);
+      } catch (emailError) {
+        console.error(`[Notification] Failed to send email to ${user.email}:`, emailError.message);
       }
-    };
+    }
 
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-      res.on('data', (chunk) => { responseBody += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(responseBody);
-          console.log('✅ OneSignal Notification Sent Successfully:', parsed);
-        } catch (e) {
-          console.log('OneSignal Response:', responseBody);
-        }
+    // 4. Send OneSignal Push Notification
+    if (user.preferences.notificationEnabled && user.preferences.oneSignalUserId) {
+      const data = JSON.stringify({
+        app_id: process.env.ONESIGNAL_APP_ID,
+        include_player_ids: [user.preferences.oneSignalUserId],
+        headings: { en: title },
+        contents: { en: message },
       });
-    });
 
-    req.on('error', (e) => {
-      console.error('❌ OneSignal Request Error:', e);
-    });
+      const options = {
+        hostname: 'onesignal.com',
+        port: 443,
+        path: '/api/v1/notifications',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
+        }
+      };
 
-    req.write(data);
-    req.end();
+      const req = https.request(options, (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => { responseBody += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(responseBody);
+            console.log('✅ OneSignal Notification Sent Successfully:', parsed);
+          } catch (e) {
+            console.log('OneSignal Response:', responseBody);
+          }
+        });
+      });
+
+      req.on('error', (e) => {
+        console.error('❌ OneSignal Request Error:', e);
+      });
+
+      req.write(data);
+      req.end();
+    } else {
+      const reason = !user.preferences.notificationEnabled ? 'Notifications disabled' : 'No Player ID';
+      console.log(`[Notification] Skip push for ${userId} (${reason}).`);
+    }
 
   } catch (error) {
     console.error('sendNotification Error:', error);
   }
 };
+
 
 /**
  * Send a welcome notification to a newly registered user

@@ -734,7 +734,7 @@ const forgotPassword = asyncHandler(async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: 'Reset code sent to email'
+      message: 'Reset code sent to email'
     });
   } catch (err) {
     console.error('Email send error:', err);
