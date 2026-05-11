@@ -2222,9 +2222,15 @@ const adminListSponsors = asyncHandler(async (req, res, next) => {
         _id: null,
         total: {
           $sum: {
-            $toDouble: { $ifNull: ["$estimatedValue", "0"] }
+            $convert: {
+              input: "$estimatedValue",
+              to: "double",
+              onError: 0.0,
+              onNull: 0.0
+            }
           }
         }
+
       }
     }
   ]);
