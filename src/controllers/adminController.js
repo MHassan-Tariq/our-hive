@@ -73,41 +73,38 @@ const getAllUsers = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const updateUserRole = asyncHandler(async (req, res, next) => {
-  const { isModerator } = req.body;
+  // 1. Find the user first to see their current status
+  const userToUpdate = await User.findById(req.params.id);
 
-  console.log('DEBUG: updateUserRole params.id:', req.params.id);
-  console.log('DEBUG: updateUserRole data:', { isModerator });
+  if (!userToUpdate) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  console.log('--- DEBUG: Toggle isModerator ---');
+  console.log('ID:', req.params.id);
+  console.log('Current Status:', userToUpdate.isModerator);
 
   // Prevent changing yourself
   if (req.params.id === req.user.id.toString()) {
     return next(new ErrorResponse('You cannot change your own moderator status', 400));
   }
 
-  if (isModerator === undefined) {
-    return next(new ErrorResponse('Please provide isModerator status', 400));
-  }
+ 
+  const newModeratorStatus = !userToUpdate.isModerator;
+  console.log('New Status will be:', newModeratorStatus);
 
-  // Handle both boolean and string "true"/"false" from frontend
-  const moderatorStatus = isModerator === true || isModerator === 'true';
-
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { isModerator: moderatorStatus },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
-
-  if (!user) {
-    return next(new ErrorResponse('User not found', 404));
-  }
+  // 3. Save the flipped value
+  userToUpdate.isModerator = newModeratorStatus;
+  await userToUpdate.save({ validateBeforeSave: false });
 
   res.status(200).json({
     success: true,
-    data: user,
+    message: `Moderator status toggled to ${newModeratorStatus}`,
+    data: userToUpdate,
   });
 });
+
+
 
 
 /**
