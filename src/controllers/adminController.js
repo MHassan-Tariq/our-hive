@@ -76,20 +76,23 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
   const { isModerator } = req.body;
 
   console.log('DEBUG: updateUserRole params.id:', req.params.id);
-  console.log('DEBUG: updateUserRole user.id:', req.user.id.toString());
-  console.log('DEBUG: updateUserRole isModerator:', isModerator);
+  console.log('DEBUG: updateUserRole data:', { isModerator });
 
   // Prevent changing yourself
   if (req.params.id === req.user.id.toString()) {
-    console.log('DEBUG: Prevented self-role change');
     return next(new ErrorResponse('You cannot change your own moderator status', 400));
   }
 
+  if (isModerator === undefined) {
+    return next(new ErrorResponse('Please provide isModerator status', 400));
+  }
+
+  // Handle both boolean and string "true"/"false" from frontend
+  const moderatorStatus = isModerator === true || isModerator === 'true';
+
   const user = await User.findByIdAndUpdate(
     req.params.id,
-    {
-      isModerator: isModerator === true,
-    },
+    { isModerator: moderatorStatus },
     {
       new: true,
       runValidators: true,
@@ -106,6 +109,7 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
   });
 });
 
+
 /**
  * @desc    Toggle a user's moderator status
  * @route   PATCH /api/admin/users/:id/moderator
@@ -118,9 +122,12 @@ const updateUserModeratorStatus = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Please provide isModerator status', 400));
   }
 
+  // Handle both boolean and string "true"/"false" from frontend
+  const moderatorStatus = isModerator === true || isModerator === 'true';
+
   const user = await User.findByIdAndUpdate(
     req.params.id,
-    { isModerator },
+    { isModerator: moderatorStatus },
     { new: true, runValidators: true }
   );
 
@@ -133,6 +140,7 @@ const updateUserModeratorStatus = asyncHandler(async (req, res, next) => {
     data: user,
   });
 });
+
 
 /**
  * @desc    Get admin dashboard — stats, activity feed, campaign goal, search
