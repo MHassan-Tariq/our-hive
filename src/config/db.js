@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const connectDB = async () => {
   try {
     if (mongoose.connection.readyState >= 1) return;
-    const conn = await mongoose.connect(process.env.MONGO_URI);
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      family: 4,
+    });
+
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     return conn;
   } catch (error) {

@@ -1,4 +1,12 @@
 require('dotenv').config();
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+// Force Google DNS to resolve Atlas SRV records if system DNS fails
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+
 const app = require('./app');
 const connectDB = require('./config/db');
  
