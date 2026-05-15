@@ -6,6 +6,7 @@ const ParticipantProfile = require('../models/ParticipantProfile');
 const PartnerProfile = require('../models/PartnerProfile');
 const ActivityLog = require('../models/ActivityLog');
 const ErrorResponse = require('../utils/errorResponse');
+const sendEmail = require('../utils/sendEmail');
 const asyncHandler = require('../utils/asyncHandler');
 const cloudinary = require('../utils/cloudinary');
 const { notifyAdmins, sendNotification, sendWelcomeNotification } = require('../utils/notificationService');
@@ -24,7 +25,9 @@ const sendTokenResponse = async (user, statusCode, res) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      isModerator: user.isModerator,
       isApproved: user.isApproved,
+
       createdAt: user.createdAt,
     },
   };
@@ -721,27 +724,17 @@ const forgotPassword = asyncHandler(async (req, res, next) => {
   console.log(resetCode);
   await user.save({ validateBeforeSave: false });
 
-  // Create nodemailer transporter for Gmail
-  const transporter = nodemailer.createTransporter({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD
-    }
-  });
-
-  const mailOptions = {
-    from: `"${process.env.FROM_NAME}" <${process.env.GMAIL_USER}>`,
-    to: user.email,
-    subject: "Password Reset Code",
-    html: `<p>Your password reset code is: <strong>${resetCode}</strong></p><p>This code will expire in 10 minutes.</p>`,
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    await sendEmail({
+      email: user.email,
+      subject: 'Password Reset Code',
+      message: `Your password reset code is: ${resetCode}. This code will expire in 10 minutes.`,
+      html: `<p>Your password reset code is: <strong>${resetCode}</strong></p><p>This code will expire in 10 minutes.</p>`,
+    });
+
     res.status(200).json({
       success: true,
-      data: 'Reset code sent to email'
+      message: 'Reset code sent to email'
     });
   } catch (err) {
     console.error('Email send error:', err);

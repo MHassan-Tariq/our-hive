@@ -85,18 +85,14 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Please provide a valid role', 400));
   }
 
-  console.log('DEBUG: updateUserRole params.id:', req.params.id);
-  console.log('DEBUG: updateUserRole user.id:', req.user.id.toString());
-  console.log('DEBUG: updateUserRole new role:', role);
-
-  if (req.params.id === req.user.id.toString()) {
-    console.log('DEBUG: Prevented self-role change');
-    return next(new ErrorResponse('You cannot change your own role', 400));
-  }
-
   const user = await User.findById(req.params.id);
   if (!user) {
     return next(new ErrorResponse('User not found', 404));
+  }
+
+  // Prevent changing yourself
+  if (req.params.id === req.user.id.toString()) {
+    return next(new ErrorResponse('You cannot change your own role', 400));
   }
 
   if (role === 'moderator') {
@@ -112,6 +108,29 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
 
   await user.save({ runValidators: true });
 
+  res.status(200).json({
+    success: true,
+    data: user,
+  });
+});
+
+/**
+ * @desc    Toggle a user's moderator status
+ * @route   PATCH /api/admin/users/:id/moderator
+ * @access  Private (Admin only)
+ */
+const updateUserModeratorStatus = asyncHandler(async (req, res, next) => {
+  const { isModerator } = req.body;
+
+  // Handle both boolean and string "true"/"false" from frontend
+  const moderatorStatus = isModerator === true || isModerator === 'true';
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    { isModerator: moderatorStatus },
+    { new: true, runValidators: true }
+  );
+
   if (!user) {
     return next(new ErrorResponse('User not found', 404));
   }
@@ -121,6 +140,8 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
     data: user,
   });
 });
+
+
 /**
  * @desc    Get admin dashboard — stats, activity feed, campaign goal, search
  * @route   GET /api/admin/dashboard
@@ -2208,7 +2229,22 @@ const adminListSponsors = asyncHandler(async (req, res, next) => {
           {
             $group: {
               _id: null,
-              total: { $sum: { $toDouble: { $ifNull: ["$estimatedValue", "0"] } } }
+              total: { 
+                $sum: { 
+                  $convert: {
+                    input: {
+                      $replaceAll: {
+                        input: { $ifNull: ["$estimatedValue", "0"] },
+                        find: "$",
+                        replacement: ""
+                      }
+                    },
+                    to: "double",
+                    onError: 0.0,
+                    onNull: 0.0
+                  }
+                } 
+              }
             }
           }
         ]);
@@ -2585,4 +2621,6 @@ module.exports = {
   adminCreateManualDonation,
   adminDeleteInKindDonation,
   adminCreatePartnerPickup,
+  updateUserModeratorStatus,
+
 };

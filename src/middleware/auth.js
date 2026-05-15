@@ -82,9 +82,11 @@ const authorize = (...roles) => {
     if (!roles.includes(req.user.role) && !isModeratorAllowed) {
       return res.status(403).json({
         success: false,
-        message: `Access denied — role '${req.user.role}' is not permitted to access this resource`,
+        message: `Access denied — user does not have required role or moderator privileges`,
       });
     }
+
+
     next();
   };
 };

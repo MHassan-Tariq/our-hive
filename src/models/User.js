@@ -154,6 +154,7 @@ UserSchema.methods.getSignedJwtToken = function () {
     firstName: this.firstName,
     lastName: this.lastName,
     email: this.email
+
   }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '30d',
   });

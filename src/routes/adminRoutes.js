@@ -60,7 +60,9 @@ const {
   adminGetMonetaryDonation,
   adminListPartnerPickups,
   updateUserRole,
+  updateUserModeratorStatus,
   adminCreateManualDonation,
+
   adminDeleteInKindDonation,
   adminCreatePartnerPickup,
 } = require('../controllers/adminController');
@@ -199,6 +201,8 @@ router.get('/dashboard', getDashboard);
  */
 router.get('/users', authorize('admin'), getAllUsers);
 router.patch('/users/:id/role', authorize('admin'), updateUserRole);
+router.patch('/users/:id/moderator', authorize('admin'), updateUserModeratorStatus);
+
 
 /**
  * @swagger
