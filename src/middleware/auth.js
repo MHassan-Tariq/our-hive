@@ -76,7 +76,10 @@ const authorize = (...roles) => {
     // Log route access attempt
     console.log(`🛡 Authorize check — Route: ${req.method} ${req.originalUrl} — User role: ${req.user?.role}`);
 
-    if (!roles.includes(req.user.role)) {
+    // Check if user has required role OR is a moderator (if 'moderator' is an allowed role)
+    const isModeratorAllowed = roles.includes('moderator') && req.user.isModerator === true;
+    
+    if (!roles.includes(req.user.role) && !isModeratorAllowed) {
       return res.status(403).json({
         success: false,
         message: `Access denied — role '${req.user.role}' is not permitted to access this resource`,
