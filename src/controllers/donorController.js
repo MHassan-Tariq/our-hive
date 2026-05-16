@@ -17,11 +17,13 @@ const getDonorProfile = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
 
   // Get donor profile with joined events
-  const profile = await DonorProfile.findOne({ userId })
+  let profile = await DonorProfile.findOne({ userId })
     .populate('joinedEvents', 'title description date time location status category imageurl');
 
   if (!profile) {
-    return next(new ErrorResponse('Donor profile not found', 404));
+    // Auto-create profile if missing for a user with donor role
+    profile = await DonorProfile.create({ userId });
+    // Re-query to get empty joinedEvents if needed (though it's empty by default)
   }
 
   // Get user information
@@ -80,12 +82,8 @@ const updateDonorProfile = asyncHandler(async (req, res, next) => {
   const profile = await DonorProfile.findOneAndUpdate(
     { userId: req.user._id },
     { monthlyGoal },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, upsert: true }
   );
-
-  if (!profile) {
-    return next(new ErrorResponse('Donor profile not found', 404));
-  }
 
   res.status(200).json({
     success: true,
@@ -185,7 +183,7 @@ const updateUserProfile = asyncHandler(async (req, res, next) => {
  * @access  Private (Donor)
  */
 const getMyJoinedEvents = asyncHandler(async (req, res, next) => {
-  const profile = await DonorProfile.findOne({ userId: req.user._id })
+  let profile = await DonorProfile.findOne({ userId: req.user._id })
     .populate({
       path: 'joinedEvents',
       select: 'title description date time location status category imageurl',
@@ -194,7 +192,8 @@ const getMyJoinedEvents = asyncHandler(async (req, res, next) => {
     });
 
   if (!profile) {
-    return next(new ErrorResponse('Donor profile not found', 404));
+    profile = await DonorProfile.create({ userId: req.user._id });
+    profile.joinedEvents = [];
   }
 
   res.status(200).json({
@@ -279,10 +278,11 @@ const joinEventAsGuest = asyncHandler(async (req, res, next) => {
 const getDonorJoinedOpportunities = asyncHandler(async (req, res, next) => {
   const { status, sortBy } = req.query;
 
-  const profile = await DonorProfile.findOne({ userId: req.user._id });
+  let profile = await DonorProfile.findOne({ userId: req.user._id });
 
   if (!profile) {
-    return next(new ErrorResponse('Donor profile not found', 404));
+    profile = await DonorProfile.create({ userId: req.user._id });
+    profile.joinedEvents = [];
   }
 
   let query = { _id: { $in: profile.joinedEvents } };
