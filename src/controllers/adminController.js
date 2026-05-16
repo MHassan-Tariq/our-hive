@@ -40,9 +40,15 @@ const getAllUsers = asyncHandler(async (req, res, next) => {
 
   const query = {};
   if (role) {
-    query.role = role;
+    console.log('DEBUG: getAllUsers filtering by role:', role);
+    if (role === 'moderator') {
+      query.isModerator = true;
+    } else {
+      query.role = role;
+    }
   }
   if (search) {
+    console.log('DEBUG: getAllUsers searching for:', search);
     const regex = { $regex: search, $options: 'i' };
     query.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
   }
@@ -73,39 +79,40 @@ const getAllUsers = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const updateUserRole = asyncHandler(async (req, res, next) => {
-  // 1. Find the user first to see their current status
-  const userToUpdate = await User.findById(req.params.id);
+  const { role } = req.body;
 
-  if (!userToUpdate) {
+  if (!role || !ROLES.includes(role)) {
+    return next(new ErrorResponse('Please provide a valid role', 400));
+  }
+
+  const user = await User.findById(req.params.id);
+  if (!user) {
     return next(new ErrorResponse('User not found', 404));
   }
 
-  console.log('--- DEBUG: Toggle isModerator ---');
-  console.log('ID:', req.params.id);
-  console.log('Current Status:', userToUpdate.isModerator);
-
   // Prevent changing yourself
   if (req.params.id === req.user.id.toString()) {
-    return next(new ErrorResponse('You cannot change your own moderator status', 400));
+    return next(new ErrorResponse('You cannot change your own role', 400));
   }
 
- 
-  const newModeratorStatus = !userToUpdate.isModerator;
-  console.log('New Status will be:', newModeratorStatus);
+  if (role === 'moderator') {
+    user.isModerator = true;
+  } else if (role === 'donor') {
+    // If specifically revoking to donor, we also clear moderator flag
+    user.isModerator = false;
+    user.role = 'donor';
+  } else {
+    // Standard role update
+    user.role = role;
+  }
 
-  // 3. Save the flipped value
-  userToUpdate.isModerator = newModeratorStatus;
-  await userToUpdate.save({ validateBeforeSave: false });
+  await user.save({ runValidators: true });
 
   res.status(200).json({
     success: true,
-    message: `Moderator status toggled to ${newModeratorStatus}`,
-    data: userToUpdate,
+    data: user,
   });
 });
-
-
-
 
 /**
  * @desc    Toggle a user's moderator status
@@ -114,10 +121,6 @@ const updateUserRole = asyncHandler(async (req, res, next) => {
  */
 const updateUserModeratorStatus = asyncHandler(async (req, res, next) => {
   const { isModerator } = req.body;
-
-  if (isModerator === undefined) {
-    return next(new ErrorResponse('Please provide isModerator status', 400));
-  }
 
   // Handle both boolean and string "true"/"false" from frontend
   const moderatorStatus = isModerator === true || isModerator === 'true';
@@ -153,6 +156,10 @@ const getDashboard = asyncHandler(async (req, res, next) => {
   ]);
   const roleCounts = ROLES.reduce((acc, role) => { acc[role] = 0; return acc; }, {});
   roleCountsArr.forEach(({ _id, count }) => { roleCounts[_id] = count; });
+
+  // Source of truth for moderators is isModerator: true
+  const totalModeratorsCount = await User.countDocuments({ isModerator: true });
+  roleCounts.moderator = totalModeratorsCount;
 
   // Pending Approvals: partners, volunteers, and participants awaiting approval
   const pendingApprovalsCount = await User.countDocuments({ 
@@ -225,6 +232,7 @@ const getDashboard = asyncHandler(async (req, res, next) => {
         pendingApprovals: pendingApprovalsCount,
         pendingDonations: pendingDonationsCount,
         activeCampaigns: activeCampaignsCount,
+        totalModerators: roleCounts.moderator,
       },
       recentActivity: formattedActivity,
       campaignGoal,
@@ -827,7 +835,8 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
     req.params.id,
     updates,
     { new: true, runValidators: true }
-  ).populate('sponsorId', 'firstName lastName email');
+  ).populate('sponsorId', 'firstName lastName email')
+   .populate('donorId', 'firstName lastName email phone profilePictureUrl');
 
   if (!donation) {
     return next(new ErrorResponse('Donation not found', 404));
@@ -835,8 +844,8 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
 
   // Activity Log integration
   await ActivityLog.create({
-    userId: donation.donorId,
-    type: 'Profile Updated', // Using closest existing enum until ActivityLog is updated for specific donation changes
+    userId: donation.donorId?._id || donation.donorId,
+    type: 'Profile Updated', 
     content: `Your in-kind donation of "${donation.itemName}" is now ${status}.`,
     relatedId: donation._id,
     relatedModel: 'InKindDonation',
@@ -856,7 +865,7 @@ const adminUpdateInKindDonationStatus = asyncHandler(async (req, res, next) => {
   }
 
   await sendNotification(
-    donation.donorId,
+    donation.donorId?._id || donation.donorId,
     title,
     `Your donation of "${donation.itemName}" is now ${status}.`,
     'update',
@@ -2140,159 +2149,135 @@ const adminUpdatePassword = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const adminListSponsors = asyncHandler(async (req, res, next) => {
-  console.log("==== START adminListSponsors ====");
+  try {
+    console.log("==== START adminListSponsors ====");
 
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
-  const { search, status } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const { search, status } = req.query;
 
-  console.log("Query Params:", { page, limit, skip, search, status });
+    console.log("Query Params:", { page, limit, skip, search, status });
 
-  // 1. Build User Query
-  const userQuery = { role: 'sponsor' };
-  if (search) {
-    const regex = { $regex: search, $options: 'i' };
-    userQuery.$or = [
-      { firstName: regex },
-      { lastName: regex },
-      { email: regex }
-    ];
-  }
+    // 1. Build Base User Query (Sponsors or Moderators)
+    const baseUserQuery = { $or: [{ role: 'sponsor' }, { isModerator: true }] };
+    
+    // 2. Build Search Query for Users
+    let searchUserQuery = {};
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+      searchUserQuery = {
+        $or: [
+          { firstName: regex },
+          { lastName: regex },
+          { email: regex }
+        ]
+      };
+    }
 
-  console.log("User Query:", userQuery);
+    // Combine Base and Search for User lookup
+    const userQuery = search ? { $and: [baseUserQuery, searchUserQuery] } : baseUserQuery;
 
-  // 2. Fetch Users
-  const users = await User.find(userQuery).select(
-    '_id firstName lastName email phone profilePictureUrl createdAt'
-  );
+    // 3. Fetch Matching Users
+    const users = await User.find(userQuery).select(
+      '_id firstName lastName email phone profilePictureUrl createdAt role isModerator'
+    ).sort({ createdAt: -1 });
 
-  console.log("Fetched Users Count:", users.length);
+    const userIds = users.map(u => u._id);
 
-  const userIds = users.map(u => u._id);
-  console.log("User IDs:", userIds);
-
-  // 3. Build Sponsor Query
-  const sponsorQuery = { userId: { $in: userIds } };
-
-  if (status) sponsorQuery.status = status;
-
-  if (search) {
-    const regex = { $regex: search, $options: 'i' };
-    sponsorQuery.$or = [{ organizationName: regex }];
-  }
-
-  console.log("Sponsor Query:", sponsorQuery);
-
-  let finalSponsors = [];
-  let total = 0;
-
-  if (search || status) {
-    console.log("Mode: FILTERED (search/status)");
-
-    const sponsorProfiles = await Sponsor.find(sponsorQuery).populate('userId');
-
-    console.log("Sponsor Profiles Count:", sponsorProfiles.length);
-
-    finalSponsors = sponsorProfiles;
-
-    total = await Sponsor.countDocuments(sponsorQuery);
-    console.log("Total (Filtered):", total);
-
-  } else {
-    console.log("Mode: DEFAULT (all sponsors)");
-
+    // 4. Fetch all Sponsor profiles for these users to get organization names
     const sponsorProfiles = await Sponsor.find({ userId: { $in: userIds } });
-
-    console.log("Sponsor Profiles Count:", sponsorProfiles.length);
-
     const profileMap = sponsorProfiles.reduce((acc, s) => {
       acc[s.userId.toString()] = s;
       return acc;
     }, {});
 
-    finalSponsors = users.map(u => {
+    // 5. Combine User data with Sponsor profile data
+    let finalSponsors = users.map(u => {
       const profile = profileMap[u._id.toString()] || {};
-
       return {
-        ...profile._doc,
+        ...(profile._doc || profile),
         _id: profile._id || `temp_${u._id}`,
         userId: u,
-        organizationName:
-          profile.organizationName ||
-          `${u.firstName} ${u.lastName}`.trim() ||
-          'Anonymous Sponsor',
+        organizationName: profile.organizationName || profile.orgName || `${u.firstName} ${u.lastName}`.trim(),
         status: profile.status || 'Active'
       };
     });
 
-    total = users.length;
-    console.log("Total (Default):", total);
-  }
+    const total = finalSponsors.length;
+    const paginatedSponsors = finalSponsors.slice(skip, skip + limit);
 
-  console.log("Final Sponsors Before Pagination:", finalSponsors.length);
+    // Stats Calculation
+    let annualContributions = 0;
+    let inKindValuation = 0;
+    let totalActivePartners = 0;
 
-  // Pagination
-  const paginatedSponsors = finalSponsors.slice(skip, skip + limit);
-  console.log("Paginated Sponsors Count:", paginatedSponsors.length);
+    try {
+      // Annual Contributions
+      const oneYearAgo = new Date();
+      oneYearAgo.setDate(oneYearAgo.getDate() - 365);
 
-  // Stats Calculation
-  console.log("Calculating Stats...");
+      const annualAggregation = await MonetaryDonation.aggregate([
+        { $match: { createdAt: { $gte: oneYearAgo }, status: 'completed' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      annualContributions = annualAggregation[0]?.total || 0;
 
-  // Annual Contributions
-  const oneYearAgo = new Date();
-  oneYearAgo.setDate(oneYearAgo.getDate() - 365);
-
-  const annualAggregation = await MonetaryDonation.aggregate([
-    { $match: { createdAt: { $gte: oneYearAgo }, status: 'completed' } },
-    { $group: { _id: null, total: { $sum: '$amount' } } }
-  ]);
-
-  const annualContributions = annualAggregation[0]?.total || 0;
-  console.log("Annual Contributions:", annualContributions);
-
-  // In-Kind Valuation
-  const inKindAggregation = await InKindDonation.aggregate([
-    {
-      $group: {
-        _id: null,
-        total: {
-          $sum: {
-            $convert: {
-              input: "$estimatedValue",
-              to: "double",
-              onError: 0.0,
-              onNull: 0.0
+      // In-Kind Valuation
+      if (typeof InKindDonation !== 'undefined') {
+        const inKindAggregation = await InKindDonation.aggregate([
+          {
+            $group: {
+              _id: null,
+              total: { 
+                $sum: { 
+                  $convert: {
+                    input: {
+                      $replaceAll: {
+                        input: { $ifNull: ["$estimatedValue", "0"] },
+                        find: "$",
+                        replacement: ""
+                      }
+                    },
+                    to: "double",
+                    onError: 0.0,
+                    onNull: 0.0
+                  }
+                } 
+              }
             }
           }
-        }
-
+        ]);
+        inKindValuation = inKindAggregation[0]?.total || 0;
       }
+
+      // Active Partners
+      totalActivePartners = await Sponsor.countDocuments({ status: 'Active' });
+    } catch (statsErr) {
+      console.error("DEBUG: Stats calculation failed:", statsErr.message);
     }
-  ]);
 
-  const inKindValuation = inKindAggregation[0]?.total || 0;
-  console.log("In-Kind Valuation:", inKindValuation);
-
-  // Active Partners
-  const totalActivePartners = await Sponsor.countDocuments({ status: 'Active' });
-  console.log("Total Active Partners:", totalActivePartners);
-
-  console.log("==== END adminListSponsors ====");
-
-  res.status(200).json({
-    success: true,
-    total,
-    page,
-    pages: Math.ceil(total / limit),
-    count: paginatedSponsors.length, // FIXED (was sponsors.length ❌)
-    stats: {
-      annualContributions,
-      inKindValuation,
-      totalActivePartners
-    },
-    data: paginatedSponsors
-  });
+    res.status(200).json({
+      success: true,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      count: paginatedSponsors.length,
+      stats: {
+        annualContributions,
+        inKindValuation,
+        totalActivePartners
+      },
+      data: paginatedSponsors
+    });
+  } catch (err) {
+    console.error("DEBUG: adminListSponsors CRASHED:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
 });
 
 /**
