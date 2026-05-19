@@ -4,6 +4,146 @@ const https = require('https');
 const sendEmail = require('./sendEmail');
 
 /**
+ * Generates a beautiful branded HTML template for emails
+ */
+const getEmailTemplate = (title, message) => {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #FAF8F5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #FAF8F5;
+      padding: 40px 20px;
+      box-sizing: border-box;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(161, 109, 54, 0.05);
+      border: 1px solid #F3ECE5;
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #b45309, #d97706);
+      padding: 32px;
+      text-align: center;
+    }
+    .logo-container {
+      display: inline-block;
+      background-color: rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .header p {
+      color: #FFedd5;
+      margin: 4px 0 0 0;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .content {
+      padding: 40px 32px;
+      color: #334155;
+      line-height: 1.6;
+    }
+    .content h2 {
+      color: #b45309;
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .content p {
+      margin-top: 0;
+      margin-bottom: 28px;
+      font-size: 16px;
+      color: #475569;
+    }
+    .cta-button {
+      display: inline-block;
+      background: #b45309;
+      color: #ffffff !important;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(180, 83, 9, 0.15);
+    }
+    .footer {
+      background-color: #FAF8F5;
+      padding: 32px;
+      text-align: center;
+      border-top: 1px solid #F1E7DD;
+    }
+    .footer p {
+      margin: 0;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .footer-logo {
+      font-size: 16px;
+      font-weight: 700;
+      color: #b45309;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="logo-container">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
+            <path d="M12 2L2 7V17L12 22L22 17V7L12 2ZM12 4.5L19.5 8.25V15.75L12 19.5L4.5 15.75V8.25L12 4.5ZM12 7.5L7.5 9.75V14.25L12 16.5L16.5 14.25V9.75L12 7.5Z" fill="#ffffff"/>
+          </svg>
+        </div>
+        <h1>Our Hive</h1>
+        <p>Connecting & Nourishing Communities</p>
+      </div>
+      <div class="content">
+        <h2>${title}</h2>
+        <p>${message}</p>
+        <a href="https://ourhive-admin.vercel.app" class="cta-button">Open Our Hive Portal</a>
+      </div>
+      <div class="footer">
+        <div class="footer-logo">🐝 Our Hive</div>
+        <p>Powered by Mrs'Bs Table</p>
+        <p style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+          You received this email because you are registered with Our Hive.<br>
+          © 2026 Our Hive. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+/**
  * Send a notification to a specific user
  * @param {string} userId - ID of the user to receive the notification
  * @param {string} title - Title of the notification
@@ -38,7 +178,7 @@ const sendNotification = async (userId, title, message, type = 'system', iconTyp
           email: user.email,
           subject: title,
           message: message,
-          html: htmlMessage || `<div style="font-family: sans-serif; line-height: 1.5;"><h3>${title}</h3><p>${message}</p></div>`
+          html: htmlMessage || getEmailTemplate(title, message)
         });
         console.log(`[Notification] Email sent to ${user.email}`);
       } catch (emailError) {
