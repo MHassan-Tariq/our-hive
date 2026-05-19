@@ -604,6 +604,7 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
  */
 const login = asyncHandler(async (req, res, next) => {
   console.log("Login function called");
+  console.log("Login function called with body:", req.body);
 
   const { email, password, playerId, deviceId } = req.body;
   console.log("Request body:", req.body);
