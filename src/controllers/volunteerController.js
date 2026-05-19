@@ -26,7 +26,12 @@ const getAvailableOpportunities = async (req, res) => {
   try {
     const { search, location, category } = req.query;
 
-    const query = { status: 'Active' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const query = { 
+      status: 'Active',
+      date: { $gte: today }
+    };
 
     // 1. Keyword search (title + description)
     if (search) {
@@ -581,6 +586,15 @@ const saveProfile = async (req, res) => {
       }
       await User.findByIdAndUpdate(req.user._id, { email: email.toLowerCase() });
     }
+
+    // Notify Volunteer (emails them)
+    await sendNotification(
+      req.user._id,
+      'Profile Updated Successfully',
+      'Your volunteer profile has been updated successfully.',
+      'update',
+      'checkmark'
+    );
 
     res.status(200).json({ success: true, data: profile });
   } catch (err) {

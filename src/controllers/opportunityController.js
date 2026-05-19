@@ -15,7 +15,12 @@ const { sendNotification } = require('../utils/notificationService');
 const getUpcomingEvents = async (req, res) => {
   try {
     const { search, location, category } = req.query;
-    const query = { status: 'Active' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const query = { 
+      status: 'Active',
+      date: { $gte: today }
+    };
 
     if (search) {
       query.$or = [

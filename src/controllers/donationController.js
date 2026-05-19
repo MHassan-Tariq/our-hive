@@ -7,7 +7,18 @@ const DonorProfile = require('../models/DonorProfile');
 const PartnerProfile = require('../models/PartnerProfile');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
-const { sendNotification } = require('../utils/notificationService');
+const { sendNotification, notifyUsersByRole } = require('../utils/notificationService');
+
+const mapFrontendStatus = (dbStatus) => {
+  const status = (dbStatus || '').toLowerCase();
+  if (status === 'offered' || status === 'pending') {
+    return 'pending';
+  }
+  if (status === 'completed') {
+    return 'delivered';
+  }
+  return status;
+};
 
 /**
  * @desc    Get donor dashboard overview
@@ -155,6 +166,15 @@ const offerItem = asyncHandler(async (req, res, next) => {
     'checkmark'
   );
 
+  // Notify all partners that a new food pickup is available
+  await notifyUsersByRole(
+    'partner',
+    'New Food Pickup Available',
+    `A new food pickup for "${itemName}" has been offered. Claim it now!`,
+    'system',
+    'info'
+  );
+
   res.status(201).json({
     success: true,
     message: 'Item posted successfully. Volunteers will be notified.',
@@ -201,7 +221,7 @@ const getMyDonations = asyncHandler(async (req, res, next) => {
     const displayLabel = isFinalized ? capitalize(dbStatus) : (dbStatus === 'offered' ? 'Available' : 'Claimed');
 
     // 4. Transform response
-    donationObj.status = capitalize(dbStatus); // Keep Capitalized for app logic
+    donationObj.status = mapFrontendStatus(dbStatus);
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
@@ -278,7 +298,7 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
     
     if (userRole === 'partner') {
-        donationObj.status = capitalize(dbStatus); // Keep Capitalized for app logic
+        donationObj.status = mapFrontendStatus(dbStatus);
         donationObj.displayStatus = displayLabel;
         
         donationObj.isClaimed = isClaimedByMe || !!donation.assignedVolunteerId;
@@ -288,7 +308,7 @@ const getAvailablePickups = asyncHandler(async (req, res, next) => {
     }
 
     // Default Volunteer Logic
-    donationObj.status = capitalize(dbStatus); // Keep Capitalized for app logic
+    donationObj.status = mapFrontendStatus(dbStatus);
     donationObj.displayStatus = displayLabel;
     
     donationObj.isClaimed = !!donation.assignedVolunteerId;
@@ -447,7 +467,7 @@ const getAssignedDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.status = capitalize(dbStatus); // Keep Capitalized for logic
+    donationObj.status = mapFrontendStatus(dbStatus);
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     
@@ -637,7 +657,7 @@ const getAllDonations = asyncHandler(async (req, res, next) => {
     const isClaimedByMe = isClaimedByPartner || (donation.assignedVolunteerId && req.user && donation.assignedVolunteerId.toString() === req.user._id.toString());
     
     donationObj.statusColor = statusColors[dbStatus] || '#A16D36';
-    donationObj.status = capitalize(dbStatus); // Keep Capitalized for logic
+    donationObj.status = mapFrontendStatus(dbStatus);
     donationObj.displayStatus = displayLabel;
     donationObj.statusLabel = displayLabel;
     
@@ -833,6 +853,8 @@ const getInKindDonationById = asyncHandler(async (req, res, next) => {
     donationData.claimedByMe = isClaimedByMe;
     donationData.statusLabel = donationData.displayStatus;
   }
+
+  donationData.status = mapFrontendStatus(dbStatus);
 
   res.status(200).json({
     success: true,

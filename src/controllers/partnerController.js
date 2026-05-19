@@ -4,7 +4,18 @@ const InKindDonation = require('../models/InKindDonation');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
 const mongoose = require('mongoose'); // Ensure mongoose is imported for ObjectId validation
-const { notifyAdmins } = require('../utils/notificationService');
+const { notifyAdmins, sendNotification } = require('../utils/notificationService');
+
+const mapFrontendStatus = (dbStatus) => {
+  const status = (dbStatus || '').toLowerCase();
+  if (status === 'offered' || status === 'pending') {
+    return 'pending';
+  }
+  if (status === 'completed') {
+    return 'delivered';
+  }
+  return status;
+};
 
 /**
  * @desc    Submit or update partner onboarding profile
@@ -89,6 +100,15 @@ const submitProfile = async (req, res) => {
       relatedId: profile._id,
       relatedModel: 'PartnerProfile',
     });
+
+    // Notify Partner (emails them)
+    await sendNotification(
+      req.user._id,
+      'Profile Submitted Successfully',
+      'Your partner profile onboarding has been successfully submitted and is pending admin review.',
+      'update',
+      'checkmark'
+    );
 
     res.status(200).json({
       success: true,
@@ -358,7 +378,7 @@ const getDashboardData = async (req, res) => {
       const isClaimedByMe = partnerClaimedDonations.includes(donation._id.toString()) || 
                             (donation.assignedVolunteerId && donation.assignedVolunteerId.toString() === partnerId.toString());
 
-      donationObj.status = capitalize(dbStatus); // Keep Capitalized for logic
+      donationObj.status = mapFrontendStatus(dbStatus);
       donationObj.displayStatus = displayLabel;
       donationObj.statusLabel = displayLabel;
       donationObj.isApproved = ['approved', 'scheduled', 'completed', 'pickedup', 'delivered'].includes(dbStatus);
@@ -506,6 +526,15 @@ const createOpportunity = async (req, res) => {
     await notifyAdmins(
       'New Event Submitted',
       `Partner "${profile.orgName}" has submitted a new event "${title}" for approval.`
+    );
+
+    // Notify the Partner themselves (emails them)
+    await sendNotification(
+      req.user._id,
+      'Event Submitted Successfully',
+      `Your event "${title}" has been submitted successfully and is pending admin approval.`,
+      'update',
+      'checkmark'
     );
 
     res.status(201).json({

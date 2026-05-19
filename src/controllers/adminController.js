@@ -13,7 +13,7 @@ const AgreementHistory = require('../models/AgreementHistory');
 const VolunteerLog = require('../models/VolunteerLog');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
-const { sendNotification } = require('../utils/notificationService');
+const { sendNotification, notifyUsersByRole } = require('../utils/notificationService');
 const { assignBadges } = require('../utils/volunteerUtils');
 
 const ROLES = [
@@ -351,6 +351,15 @@ const updateOpportunityStatus = asyncHandler(async (req, res, next) => {
       `Your event "${opportunity.title}" has been approved for the calendar.`,
       'approval',
       'checkmark'
+    );
+
+    // Notify all volunteers about the new calendar event / opportunity
+    await notifyUsersByRole(
+      'volunteer',
+      'New Event / Opportunity',
+      `A new event "${opportunity.title}" has been added to the calendar. Join now!`,
+      'system',
+      'info'
     );
   }
 
@@ -1140,6 +1149,15 @@ const adminCreatePartnerPickup = asyncHandler(async (req, res, next) => {
       source: 'web'
     });
 
+    // Notify all partners that a new food pickup is available
+    await notifyUsersByRole(
+      'partner',
+      'New Food Pickup Available',
+      `A new food pickup for "${itemName}" is available. Claim it now!`,
+      'system',
+      'info'
+    );
+
     res.status(201).json({
       success: true,
       message: 'Partner pickup created successfully',
@@ -1593,6 +1611,17 @@ const adminCreateOpportunity = asyncHandler(async (req, res, next) => {
   }
 
   const opportunity = await Opportunity.create(opportunityData);
+
+  // If immediately active/confirmed, notify volunteers of the new calendar event / opportunity
+  if (opportunity.status === 'Active' || opportunity.status === 'Confirmed') {
+    await notifyUsersByRole(
+      'volunteer',
+      'New Event / Opportunity',
+      `A new event "${opportunity.title}" has been added to the calendar. Join now!`,
+      'system',
+      'info'
+    );
+  }
 
   res.status(201).json({
     success: true,

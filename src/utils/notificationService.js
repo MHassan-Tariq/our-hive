@@ -140,4 +140,25 @@ const notifyAdmins = async (title, message) => {
   }
 };
 
-module.exports = { sendNotification, sendWelcomeNotification, notifyAdmins };
+/**
+ * Send a notification to all users matching one of the specified roles
+ * @param {Array|string} roles - Role or array of roles
+ * @param {string} title 
+ * @param {string} message 
+ * @param {string} type 
+ * @param {string} iconType 
+ */
+const notifyUsersByRole = async (roles, title, message, type = 'system', iconType = 'info') => {
+  try {
+    const roleList = Array.isArray(roles) ? roles : [roles];
+    const users = await User.find({ role: { $in: roleList } }).select('_id');
+    for (const user of users) {
+      await sendNotification(user._id, title, message, type, iconType);
+    }
+    console.log(`[Notification] Dispatched role notifications to ${users.length} users with roles: ${roleList.join(', ')}`);
+  } catch (error) {
+    console.error('notifyUsersByRole Error:', error);
+  }
+};
+
+module.exports = { sendNotification, sendWelcomeNotification, notifyAdmins, notifyUsersByRole };
