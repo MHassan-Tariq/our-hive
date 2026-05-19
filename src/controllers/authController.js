@@ -43,8 +43,9 @@ const sendTokenResponse = async (user, statusCode, res) => {
 };
 
 const register = asyncHandler(async (req, res, next) => {
+  console.log('Registering user with body:', req.body);
   let { firstName, lastName, fullName, email, password, phone, role, mailingAddress, skills, availability, playerId, deviceId } = req.body;
-  const effectivePlayerId = playerId || deviceId || '';
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId) || '';
   console.log('\n========== REGISTRATION START ==========');
   console.log('1. Received entire request body:', req.body);
   console.log('   - phone value:', phone, '| type:', typeof phone);
@@ -175,7 +176,7 @@ const register = asyncHandler(async (req, res, next) => {
 const volunteerRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Volunteer Registration Started ---');
   let { firstName, lastName, fullName, email, password, phone, skills, availability, mailingAddress, playerId, deviceId } = req.body;
-  const effectivePlayerId = playerId || deviceId || '';
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId) || '';
   console.log('Received body:', req.body);
 
   // Handle single "fullName" field from UI if firstName/lastName missing
@@ -386,7 +387,7 @@ const volunteerRegister = asyncHandler(async (req, res, next) => {
 const participantRegister = asyncHandler(async (req, res, next) => {
   console.log('--- Participant Registration Started ---');
   let { fullName, email, password, phone, mailingAddress, playerId, deviceId } = req.body;
-  const effectivePlayerId = playerId || deviceId || '';
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId) || '';
   console.log('Received body:', req.body);
 
   // Validate required fields
@@ -485,7 +486,7 @@ const partnerRegister = asyncHandler(async (req, res, next) => {
     playerId,
     deviceId
   } = req.body;
-  const effectivePlayerId = playerId || deviceId || '';
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId) || '';
 
   
   // Handle name field
@@ -607,7 +608,7 @@ const login = asyncHandler(async (req, res, next) => {
   const { email, password, playerId, deviceId } = req.body;
   console.log("Request body:", req.body);
 
-  const effectivePlayerId = playerId || deviceId;
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId);
   console.log("Effective Player ID:", effectivePlayerId);
 
   // Validate input

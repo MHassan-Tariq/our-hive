@@ -260,10 +260,10 @@ exports.updateSettings = asyncHandler(async (req, res, next) => {
  */
 exports.updatePushToken = asyncHandler(async (req, res, next) => {
   const { playerId, deviceId } = req.body;
-  const effectivePlayerId = playerId || deviceId;
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId);
 
   if (!effectivePlayerId) {
-    return next(new ErrorResponse('Please provide a OneSignal Player ID (playerId or deviceId)', 400));
+    return next(new ErrorResponse('Please provide a OneSignal Player ID (playerId, deviceId, or oneSignalUserId)', 400));
   }
 
   await User.findByIdAndUpdate(req.user._id, {
@@ -285,8 +285,9 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
   let { firstName, lastName, Name, phone, mailingAddress, playerId, deviceId } = req.body;
   const updateData = {};
 
-  if (playerId || deviceId) {
-    updateData['preferences.oneSignalUserId'] = playerId || deviceId;
+  const effectivePlayerId = playerId || deviceId || req.body.oneSignalUserId || req.body.oneSignalId || (req.body.preferences && req.body.preferences.oneSignalUserId) || (req.body.preferences && req.body.preferences.playerId);
+  if (effectivePlayerId) {
+    updateData['preferences.oneSignalUserId'] = effectivePlayerId;
   }
 
   // Handle fullName field - split into firstName and lastName
