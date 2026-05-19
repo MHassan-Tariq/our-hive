@@ -76,21 +76,9 @@ const getEmailTemplate = (title, message) => {
     }
     .content p {
       margin-top: 0;
-      margin-bottom: 28px;
+      margin-bottom: 0;
       font-size: 16px;
       color: #475569;
-    }
-    .cta-button {
-      display: inline-block;
-      background: #b45309;
-      color: #ffffff !important;
-      text-decoration: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-weight: 600;
-      font-size: 15px;
-      text-align: center;
-      box-shadow: 0 4px 6px rgba(180, 83, 9, 0.15);
     }
     .footer {
       background-color: #FAF8F5;
@@ -127,7 +115,6 @@ const getEmailTemplate = (title, message) => {
       <div class="content">
         <h2>${title}</h2>
         <p>${message}</p>
-      
       </div>
       <div class="footer">
         <div class="footer-logo">🐝 Our Hive</div>
