@@ -127,7 +127,7 @@ const getEmailTemplate = (title, message) => {
       <div class="content">
         <h2>${title}</h2>
         <p>${message}</p>
-        <a href="https://ourhive-admin.vercel.app" class="cta-button">Open Our Hive Portal</a>
+      
       </div>
       <div class="footer">
         <div class="footer-logo">🐝 Our Hive</div>
