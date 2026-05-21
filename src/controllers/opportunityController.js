@@ -18,7 +18,7 @@ const getUpcomingEvents = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const query = { 
-      status: 'Active',
+      status: { $in: ['Active', 'Confirmed'] },
       date: { $gte: today }
     };
 
@@ -64,7 +64,7 @@ const joinEvent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    if (opportunity.status !== 'Active') {
+    if (!['Active', 'Confirmed'].includes(opportunity.status)) {
       return res.status(400).json({
         success: false,
         message: `This event is no longer active (status: ${opportunity.status}).`,
@@ -255,7 +255,7 @@ const checkInToEvent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    if (opportunity.status !== 'Active') {
+    if (!['Active', 'Confirmed'].includes(opportunity.status)) {
       return res.status(400).json({
         success: false,
         message: `This event is no longer active (status: ${opportunity.status}).`,
