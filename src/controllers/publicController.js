@@ -146,16 +146,8 @@ exports.getDistributionSchedule = async (req, res) => {
       endDate = endOfDay(new Date(now.getTime() + 24 * 60 * 60 * 1000));
     } 
     else if (filter === 'this_week') {
-      const day = now.getDay();
-      const diffToMonday = day === 0 ? -6 : 1 - day;
-
-      startDate = startOfDay(
-        new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday)
-      );
-
-      endDate = endOfDay(
-        new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)
-      );
+      startDate = startOfDay(now);
+      endDate = null;
     } 
     else {
       startDate = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
@@ -167,7 +159,10 @@ exports.getDistributionSchedule = async (req, res) => {
     };
 
     if (filter !== 'all') {
-      query.date = { $gte: startDate, $lte: endDate };
+      query.date = { $gte: startDate };
+      if (endDate) {
+        query.date.$lte = endDate;
+      }
     }
 
     // 🔎 Search functionality
